@@ -5,7 +5,7 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 import os
 
 # dataloading
-
+    
 file_name = '07_19_2025100k_samples_txp_1551.5_pax_1552.5_polcon_and_fiber_1Hz.mat'
 
 mat_data = scipy.io.loadmat(file_name)
@@ -15,7 +15,7 @@ variables = ['s1_pax', 's2_pax', 's3_pax', 's1_txp', 's2_txp', 's3_txp']
 
 # analysis parameters
 subset_size = 100000
-period_length = 10000
+period_length = 3000
 
 decompositions = {} 
 
@@ -94,7 +94,7 @@ for base in bases:
     plt.close(fig_base_raw)
 
 # Save Seasonality
-ax_season_color.set_title('Seasonality Comparison: Output (Solid) vs Input (Dashed)')
+ax_season_color.set_title('Seasonality Comparison: Output vs Input')
 ax_season_color.set_xlabel('Sample')
 ax_season_color.set_ylabel('Value')
 ax_season_color.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
@@ -103,7 +103,7 @@ fig_season_color.savefig('combined_seasonality.png')
 plt.close(fig_season_color)
 
 # Save Trend
-ax_trend_color.set_title('Trend Comparison: Output (Solid) vs Input (Dashed)')
+ax_trend_color.set_title('Trend Comparison: Output vs Input')
 ax_trend_color.set_xlabel('Sample')
 ax_trend_color.set_ylabel('Value')
 ax_trend_color.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
