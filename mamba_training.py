@@ -9,10 +9,10 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-device = torch.device("cuda")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("PyTorch version:", torch.__version__)
+print("Current device:", device)
 torch.backends.cudnn.benchmark = True # Optimizes performance for fixed input sizes
-print(f" Running on GPU: {torch.cuda.get_device_name(0)}")
-print(f" CUDA Version: {torch.version.cuda}")
 
 class MambaBlock(nn.Module):
     def __init__(self, d_model: int, d_state: int = 16, d_conv: int = 4, expand: int = 2):
@@ -157,7 +157,7 @@ class SParameterDataset(Dataset):
 # Config
 window_size = 64
 batch_size = 64
-epochs = 10
+epochs = 3
 
 # Prepare Data
 dataset = SParameterDataset(features, targets, window_size)
@@ -168,8 +168,8 @@ split_idx = int(0.8 * total_len)
 train_set = torch.utils.data.Subset(dataset, range(0, split_idx))
 test_set = torch.utils.data.Subset(dataset, range(split_idx, total_len))
 
-train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True)
-test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, pin_memory=True)
+train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
 # Initialize Model
 model = PolarizationMamba(input_dim=3, d_model=64, n_layers=3).to(device)
@@ -282,7 +282,39 @@ plt.savefig('s_parameter_errors.png')
 
 # Print Statistics for the slice
 print("\n Statistics:")
+avg_mae = 0
+avg_rmse = 0
 for i in range(3):
     mae = np.mean(errors_slice[:, i])
     rmse = np.sqrt(np.mean(errors_slice[:, i]**2))
+    avg_mae += mae
+    avg_rmse += rmse
     print(f"{params[i]} - MAE: {mae:.5f}, RMSE: {rmse:.5f}")
+print(f"Mean - MAE: {avg_mae:.5f}, RMSE: {avg_rmse:.5f}")
+
+# Plot L2 Norms of predictions to determine if they deviate from 1
+# Calculate L2 Norms of the predictions
+predicted_norms = np.linalg.norm(preds_slice, axis=1)
+
+# Calculate Deviation from poincare unit sphere
+deviation_from_unity = np.abs(predicted_norms - 1)
+
+# Plot L2 Norm vs Time
+plt.figure(figsize=(12, 6))
+plt.plot(time_indices, predicted_norms, label='Predicted L2 Norm', color='green', linewidth=1.5)
+plt.axhline(y=1.0, color='black', linestyle='--', linewidth=2, label='Unit Sphere (Ideal = 1.0)')
+plt.title('Physical Consistency Check: Magnitude of Predicted Stokes Vectors')
+plt.xlabel('Time Index')
+plt.ylabel('Vector Magnitude')
+plt.legend()
+plt.grid(True, alpha=0.5)
+plt.tight_layout()
+plt.savefig('s_parameter_norms.png')
+
+# Print Deviation Statistics
+mean_dev = np.mean(deviation_from_unity)
+max_dev = np.max(deviation_from_unity)
+
+print("Physical Validity Statistics:")
+print(f"Mean Deviation from Unit Norm: {mean_dev:.6f}")
+print(f"Max Deviation from Unit Norm:  {max_dev:.6f}")
