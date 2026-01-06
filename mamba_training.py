@@ -112,7 +112,7 @@ class PolarizationMamba(nn.Module):
         x = self.norm_f(x)
         return self.head(x[:, -1, :])
 
-path = "07_19_2025100k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_1Hz.mat"
+path = "Datasets/07_19_2025100k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_1Hz.mat"
 if not os.path.exists(path):
     print(f"File not found at {path}")
     exit(1)
@@ -218,6 +218,14 @@ for epoch in range(epochs):
     
     tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {test_loss:.6f}")
 
+plt.plot(train_losses, label='Train Loss')
+plt.plot(test_losses, label='Test Loss')
+plt.xlabel('Epoch')
+plt.ylabel('MSE Loss')
+plt.title('DLinear Training Convergence')
+plt.legend()
+plt.show()
+
 # Final Evaluation
 model.eval()
 preds, actuals = [], []
@@ -232,6 +240,7 @@ preds = np.concatenate(preds)
 actuals = np.concatenate(actuals)
 
 # Evaluation Plotting
+# Number of points plotted (starting at end of training data)
 N_PLOT = 1000
 # Slice the first N_PLOT samples from the test results
 preds_slice = preds[:N_PLOT]
@@ -239,16 +248,15 @@ actuals_slice = actuals[:N_PLOT]
 errors_slice = np.abs(preds_slice - actuals_slice)
 
 # Create the correct time indices for the x-axis
-# The test set starts after the training set (split_idx)
 start_time_index = split_idx 
 time_indices = range(start_time_index + window_size, start_time_index + window_size + N_PLOT)
 
-# Predictions vs Actuals
-plt.figure(figsize=(15, 10)) # Increased height for clarity
+plt.figure(figsize=(15, 10))
 params = ['S1', 'S2', 'S3']
 
 for i in range(3):
-    plt.subplot(3, 2, (i*2)+1) # Layout similar to reference
+    # Predictions vs Actuals
+    plt.subplot(3, 2, (i*2)+1)
     plt.plot(time_indices, actuals_slice[:, i], label='Actual', color='blue', linewidth=1.5)
     plt.plot(time_indices, preds_slice[:, i], label='Predicted', color='red', linestyle='--', linewidth=1.5)
     plt.title(f'{params[i]} Parameter Time Series')
@@ -257,7 +265,7 @@ for i in range(3):
     plt.legend()
     plt.grid(True, alpha=0.5)
 
-    # Error Plot (Side-by-side)
+    # Error Plot
     plt.subplot(3, 2, (i*2)+2)
     plt.plot(time_indices, errors_slice[:, i], label='Abs Error', color='purple', alpha=0.8)
     plt.title(f'{params[i]} Absolute Error')
@@ -266,19 +274,6 @@ for i in range(3):
 
 plt.tight_layout()
 plt.savefig('s_parameter_predictions.png')
-
-# Absolute Error
-plt.figure(figsize=(15, 5))
-for i in range(3):
-    plt.subplot(1, 3, i+1)
-    plt.plot(errors_slice[:, i], label='Abs Error', color='red', alpha=0.6)
-    plt.title(f'{params[i]} Absolute Error')
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.ylim(bottom=0)
-
-plt.tight_layout()
-plt.savefig('s_parameter_errors.png')
 
 # Print Statistics for the slice
 print("\n Statistics:")
