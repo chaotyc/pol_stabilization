@@ -34,13 +34,31 @@ s3_txp = mat_data['s3_txp'].flatten()
 features = np.column_stack([s1_txp, s2_txp, s3_txp])
 targets = np.column_stack([s1_pax, s2_pax, s3_pax])
 
+split_idx = int(0.8 * len(features))
+
+train_features = features[:split_idx]
+train_targets = targets[:split_idx]
+test_features = features[split_idx:]
+test_targets = targets[split_idx:]
+
+# Compute normalization statistics from training data
+f_mean = torch.FloatTensor(train_features.mean(axis=0))
+f_std = torch.FloatTensor(train_features.std(axis=0) + 1e-6)
+t_mean = torch.FloatTensor(train_targets.mean(axis=0))
+t_std = torch.FloatTensor(train_targets.std(axis=0) + 1e-6)
+
 class SParameterDataset(Dataset):
-    def __init__(self, features, targets, window_size):
+    def __init__(self, features, targets, window_size, f_mean, f_std, t_mean, t_std):
         self.features = torch.FloatTensor(features)
         self.targets = torch.FloatTensor(targets)
         
-        self.features = (self.features - self.f_mean) / self.f_std
-        self.targets = (self.targets - self.t_mean) / self.t_std
+        # Store stats for denormalization later
+        self.t_mean = t_mean
+        self.t_std = t_std
+        
+        # Normalize using the PASSED statistics
+        self.features = (self.features - f_mean) / f_std
+        self.targets = (self.targets - t_mean) / t_std
         self.window_size = window_size
 
     def __len__(self):
@@ -56,23 +74,18 @@ class SParameterDataset(Dataset):
 # Config
 window_size = 64
 batch_size = 64
-epochs = 3
+epochs = 4
 
 # Prepare Data
-dataset = SParameterDataset(features, targets, window_size)
-total_len = len(dataset)
-split_idx = int(0.8 * total_len)
-
-# Create sequential splits (First 80% for train, Last 20% for test)
-train_set = torch.utils.data.Subset(dataset, range(0, split_idx))
-test_set = torch.utils.data.Subset(dataset, range(split_idx, total_len))
+train_set = SParameterDataset(train_features, train_targets, window_size, f_mean, f_std, t_mean, t_std)
+test_set = SParameterDataset(test_features, test_targets, window_size, f_mean, f_std, t_mean, t_std)
 
 train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
 # Initialize Model
 model = PolarizationMamba(input_dim=3, d_model=64, n_layers=3).to(device)
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5, weight_decay=1e-5)
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
 criterion = nn.MSELoss()
 
 print(f"Model Parameters: {sum(p.numel() for p in model.parameters())}")
@@ -121,9 +134,9 @@ plt.plot(train_losses, label='Train Loss')
 plt.plot(test_losses, label='Test Loss')
 plt.xlabel('Epoch')
 plt.ylabel('MSE Loss')
-plt.title('DLinear Training Convergence')
+plt.title('MAMBA Training Convergence')
 plt.legend()
-plt.show()
+plt.savefig('MAMBA_training_convergence.png')
 
 # Final Evaluation
 model.eval()
@@ -132,8 +145,8 @@ with torch.no_grad():
     for x, y in tqdm(test_loader, desc="Evaluating"):
         x, y = x.to(device), y.to(device)
         output = model(x)
-        preds.append(dataset.denorm(output))
-        actuals.append(dataset.denorm(y))
+        preds.append(train_set.denorm(output))
+        actuals.append(train_set.denorm(y))
 
 preds = np.concatenate(preds)
 actuals = np.concatenate(actuals)
@@ -172,7 +185,7 @@ for i in range(3):
     plt.grid(True, alpha=0.5)
 
 plt.tight_layout()
-plt.savefig('s_parameter_predictions.png')
+plt.savefig('MAMBA_predictions.png')
 
 # Print Statistics for the slice
 print("\n Statistics:")
@@ -184,6 +197,8 @@ for i in range(3):
     avg_mae += mae
     avg_rmse += rmse
     print(f"{params[i]} - MAE: {mae:.5f}, RMSE: {rmse:.5f}")
+avg_mae /= 3
+avg_rmse /= 3
 print(f"Mean - MAE: {avg_mae:.5f}, RMSE: {avg_rmse:.5f}")
 
 # Plot L2 Norms of predictions to determine if they deviate from 1
@@ -203,7 +218,7 @@ plt.ylabel('Vector Magnitude')
 plt.legend()
 plt.grid(True, alpha=0.5)
 plt.tight_layout()
-plt.savefig('s_parameter_norms.png')
+plt.savefig('MAMBA_s_parameter_norms.png')
 
 # Print Deviation Statistics
 mean_dev = np.mean(deviation_from_unity)
