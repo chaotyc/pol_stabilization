@@ -7,13 +7,25 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from args import parse_args
 from mamba import MambaBlock, PolarizationMamba
+from loss import AngularLoss, PoincareRegularizedMSE
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("PyTorch version:", torch.__version__)
 print("Current device:", device)
 torch.backends.cudnn.benchmark = True # Optimizes performance for fixed input sizes
 
+# Parse Arguments
+args = parse_args()
+window_size = args.window_size
+pred_len = args.pred_len
+epochs = args.epochs
+batch_size = args.batch_size
+lr = args.lr
+loss_type = {"MSE": nn.MSELoss(),
+             "RegMSE": PoincareRegularizedMSE(lambda_reg=0.1),
+             "Angular": AngularLoss()}[args.loss.lower()]
 
 path = "Datasets/07_19_2025100k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_1Hz.mat"
 if not os.path.exists(path):
@@ -71,11 +83,6 @@ class SParameterDataset(Dataset):
         if isinstance(y, torch.Tensor): y = y.cpu().detach().numpy()
         return y * self.t_std.numpy() + self.t_mean.numpy()
 
-# Config
-window_size = 64
-batch_size = 64
-epochs = 4
-
 # Prepare Data
 train_set = SParameterDataset(train_features, train_targets, window_size, f_mean, f_std, t_mean, t_std)
 test_set = SParameterDataset(test_features, test_targets, window_size, f_mean, f_std, t_mean, t_std)
@@ -84,9 +91,9 @@ train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
 # Initialize Model
-model = PolarizationMamba(input_dim=3, d_model=64, n_layers=3).to(device)
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
-criterion = nn.MSELoss()
+model = PolarizationMamba(input_dim=3, d_model=args.dim, n_layers=args.layers).to(device)
+optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
+criterion = loss_type
 
 print(f"Model Parameters: {sum(p.numel() for p in model.parameters())}")
 print("Starting Training...")
@@ -153,7 +160,7 @@ actuals = np.concatenate(actuals)
 
 # Evaluation Plotting
 # Number of points plotted (starting at end of training data)
-N_PLOT = 1000
+N_PLOT = 200
 # Slice the first N_PLOT samples from the test results
 preds_slice = preds[:N_PLOT]
 actuals_slice = actuals[:N_PLOT]
