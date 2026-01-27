@@ -137,13 +137,18 @@ for epoch in range(epochs):
     
     tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {test_loss:.6f}")
 
+model_info = f"{args.dim}x{args.layers}_LR{lr}_Loss{args.loss}_PL{pred_len}"
+
+# Training Convergence Plot
+plt.figure(figsize=(10, 6))
 plt.plot(train_losses, label='Train Loss')
 plt.plot(test_losses, label='Test Loss')
 plt.xlabel('Epoch')
-plt.ylabel('MSE Loss')
-plt.title('MAMBA Training Convergence')
+plt.ylabel('Loss')
+plt.title(f'MAMBA Training Convergence\n({model_info})')
 plt.legend()
-plt.savefig('MAMBA_training_convergence.png')
+plt.grid(True)
+plt.savefig(f'MAMBA_convergence_{model_info}.png')
 
 # Final Evaluation
 model.eval()
@@ -178,7 +183,7 @@ for i in range(3):
     plt.subplot(3, 2, (i*2)+1)
     plt.plot(time_indices, actuals_slice[:, i], label='Actual', color='blue', linewidth=1.5)
     plt.plot(time_indices, preds_slice[:, i], label='Predicted', color='red', linestyle='--', linewidth=1.5)
-    plt.title(f'{params[i]} Parameter Time Series')
+    plt.title(f'{params[i]} Parameter Time Series ({model_info})')
     plt.xlabel('Time Index')
     plt.ylabel('Value')
     plt.legend()
@@ -192,7 +197,7 @@ for i in range(3):
     plt.grid(True, alpha=0.5)
 
 plt.tight_layout()
-plt.savefig('MAMBA_predictions.png')
+plt.savefig(f'MAMBA_predictions_{model_info}.png')
 
 # Print Statistics for the slice
 print("\n Statistics:")
@@ -219,13 +224,12 @@ deviation_from_unity = np.abs(predicted_norms - 1)
 plt.figure(figsize=(12, 6))
 plt.plot(time_indices, predicted_norms, label='Predicted L2 Norm', color='green', linewidth=1.5)
 plt.axhline(y=1.0, color='black', linestyle='--', linewidth=2, label='Unit Sphere (Ideal = 1.0)')
-plt.title('Physical Consistency Check: Magnitude of Predicted Stokes Vectors')
-plt.xlabel('Time Index')
+plt.title(f'Physical Consistency Check ({model_info})')plt.xlabel('Time Index')
 plt.ylabel('Vector Magnitude')
 plt.legend()
 plt.grid(True, alpha=0.5)
 plt.tight_layout()
-plt.savefig('MAMBA_s_parameter_norms.png')
+plt.savefig(f'MAMBA_norms_{model_info}.png')
 
 # Print Deviation Statistics
 mean_dev = np.mean(deviation_from_unity)
