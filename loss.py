@@ -23,7 +23,7 @@ class AngularLoss(nn.Module):
         
         return theta.mean()
     
-class PoicareRegularizedMSE(nn.Module):
+class PoincareRegularizedMSE(nn.Module):
     def __init__(self, lambda_reg=0.1):
         super().__init__()
         self.lambda_reg = lambda_reg

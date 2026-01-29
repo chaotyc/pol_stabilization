@@ -20,19 +20,24 @@ mat_data = scipy.io.loadmat(path)
 s1_pax = mat_data['s1_pax'].flatten()
 s2_pax = mat_data['s2_pax'].flatten()
 s3_pax = mat_data['s3_pax'].flatten()
+s1_txp = mat_data['s1_txp'].flatten()
+s2_txp = mat_data['s2_txp'].flatten()
+s3_txp = mat_data['s3_txp'].flatten()
 
 targets = np.column_stack([s1_pax, s2_pax, s3_pax])
+features = np.column_stack([s1_txp, s2_txp, s3_txp])
 
 # Split Data
 split_idx = int(split_ratio * len(targets))
 test_targets = targets[split_idx:]
+test_features = features[split_idx:]
 
 print(f"Test Set Size: {len(test_targets)}")
 
 # Naive Forecast (Persistence)
 # Assumption: x[t] = x[t-1]
 actuals = test_targets[1:]
-naive_preds = test_targets[:-1]
+naive_preds = test_features[:-1]
 
 # Evaluation Metrics
 mse = mean_squared_error(actuals, naive_preds)
