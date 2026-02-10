@@ -52,4 +52,11 @@ def parse_args():
         help="Number of layers in the model",
     )
 
+    parser.add_argument(
+        "--wavelength-range",
+        type=str,
+        default="5mm",
+        help="Wavelength difference for the dataset (e.g., '1mm', '5mm')",
+    )
+
     return parser.parse_args()
