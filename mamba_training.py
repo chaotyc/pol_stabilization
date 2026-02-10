@@ -24,11 +24,19 @@ pred_len = args.pred_len
 epochs = args.epochs
 batch_size = args.batch_size
 lr = args.lr
+delta_lambda = args.wavelength_range
+
 loss_type = {"mse": nn.MSELoss(),
              "regmse": PoincareRegularizedMSE(lambda_reg=0.1),
              "angular": AngularLoss()}[args.loss.lower()]
 
-path = "Datasets/07_19_2025100k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_1Hz.mat"
+if delta_lambda == "1mm":
+    path = "Datasets/07_19_2025100k_samples_txp_1551.5_pax_1552.5_polcon_and_fiber_1Hz.mat"
+elif delta_lambda == "5mm":
+    path = "Datasets/07_19_2025100k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_1Hz.mat"
+else:
+    print(f"Dataset does not exist for wavelength range {delta_lambda}")
+    
 if not os.path.exists(path):
     print(f"File not found at {path}")
     exit(1)
@@ -140,7 +148,7 @@ for epoch in range(epochs):
     
     tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {test_loss:.6f}")
 
-model_info = f"{args.dim}x{args.layers}_LR{lr}_Loss{args.loss}_PL{pred_len}"
+model_info = f"{args.dim}x{args.layers}_LR{lr}_Loss{args.loss}_PL{pred_len}_WR{args.wavelength_range}"
 
 # Training Convergence Plot
 plt.figure(figsize=(10, 6))
