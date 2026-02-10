@@ -10,6 +10,7 @@ from tqdm import tqdm
 from args import parse_args
 from mamba import MambaBlock, PolarizationMamba
 from loss import AngularLoss, PoincareRegularizedMSE
+from plotting import output_results
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("PyTorch version:", torch.__version__)
@@ -23,9 +24,9 @@ pred_len = args.pred_len
 epochs = args.epochs
 batch_size = args.batch_size
 lr = args.lr
-loss_type = {"MSE": nn.MSELoss(),
-             "RegMSE": PoincareRegularizedMSE(lambda_reg=0.1),
-             "Angular": AngularLoss()}[args.loss.lower()]
+loss_type = {"mse": nn.MSELoss(),
+             "regmse": PoincareRegularizedMSE(lambda_reg=0.1),
+             "angular": AngularLoss()}[args.loss.lower()]
 
 path = "Datasets/07_19_2025100k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_1Hz.mat"
 if not os.path.exists(path):
@@ -60,38 +61,40 @@ t_mean = torch.FloatTensor(train_targets.mean(axis=0))
 t_std = torch.FloatTensor(train_targets.std(axis=0) + 1e-6)
 
 class SParameterDataset(Dataset):
-    def __init__(self, features, targets, window_size, f_mean, f_std, t_mean, t_std):
+    def __init__(self, features, targets, window_size, pred_len, f_mean, f_std, t_mean, t_std):
         self.features = torch.FloatTensor(features)
         self.targets = torch.FloatTensor(targets)
-        
-        # Store stats for denormalization later
         self.t_mean = t_mean
         self.t_std = t_std
-        
-        # Normalize using the PASSED statistics
         self.features = (self.features - f_mean) / f_std
         self.targets = (self.targets - t_mean) / t_std
         self.window_size = window_size
+        self.pred_len = pred_len 
 
     def __len__(self):
-        return len(self.features) - self.window_size
+        return len(self.features) - self.window_size - self.pred_len + 1
 
     def __getitem__(self, idx):
-        return self.features[idx : idx + self.window_size], self.targets[idx + self.window_size - 1]
-
+        x = self.features[idx : idx + self.window_size]
+        
+        start_idx = idx + self.window_size
+        y = self.targets[start_idx : start_idx + self.pred_len]
+        
+        return x, y
+    
     def denorm(self, y):
         if isinstance(y, torch.Tensor): y = y.cpu().detach().numpy()
         return y * self.t_std.numpy() + self.t_mean.numpy()
 
 # Prepare Data
-train_set = SParameterDataset(train_features, train_targets, window_size, f_mean, f_std, t_mean, t_std)
-test_set = SParameterDataset(test_features, test_targets, window_size, f_mean, f_std, t_mean, t_std)
+train_set = SParameterDataset(train_features, train_targets, window_size, pred_len,f_mean, f_std, t_mean, t_std)
+test_set = SParameterDataset(test_features, test_targets, window_size, pred_len, f_mean, f_std, t_mean, t_std)
 
 train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
 # Initialize Model
-model = PolarizationMamba(input_dim=3, d_model=args.dim, n_layers=args.layers).to(device)
+model = PolarizationMamba(input_dim=3, d_model=args.dim, n_layers=args.layers, pred_len=args.pred_len).to(device)
 optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
 criterion = loss_type
 
@@ -165,77 +168,6 @@ actuals = np.concatenate(actuals)
 
 # Evaluation Plotting
 # Number of points plotted (starting at end of training data)
-N_PLOT = 200
-# Slice the first N_PLOT samples from the test results
-preds_slice = preds[:N_PLOT]
-actuals_slice = actuals[:N_PLOT]
-errors_slice = np.abs(preds_slice - actuals_slice)
+N_PLOT = 500
 
-# Create the correct time indices for the x-axis
-start_time_index = split_idx 
-time_indices = range(start_time_index + window_size, start_time_index + window_size + N_PLOT)
-
-plt.figure(figsize=(15, 10))
-params = ['S1', 'S2', 'S3']
-
-for i in range(3):
-    # Predictions vs Actuals
-    plt.subplot(3, 2, (i*2)+1)
-    plt.plot(time_indices, actuals_slice[:, i], label='Actual', color='blue', linewidth=1.5)
-    plt.plot(time_indices, preds_slice[:, i], label='Predicted', color='red', linestyle='--', linewidth=1.5)
-    plt.title(f'{params[i]} Parameter Time Series ({model_info})')
-    plt.xlabel('Time Index')
-    plt.ylabel('Value')
-    plt.legend()
-    plt.grid(True, alpha=0.5)
-
-    # Error Plot
-    plt.subplot(3, 2, (i*2)+2)
-    plt.plot(time_indices, errors_slice[:, i], label='Abs Error', color='purple', alpha=0.8)
-    plt.title(f'{params[i]} Absolute Error')
-    plt.xlabel('Time Index')
-    plt.grid(True, alpha=0.5)
-
-plt.tight_layout()
-plt.savefig(f'MAMBA_predictions_{model_info}.png')
-
-# Print Statistics for the slice
-print("\n Statistics:")
-avg_mae = 0
-avg_rmse = 0
-for i in range(3):
-    mae = np.mean(errors_slice[:, i])
-    rmse = np.sqrt(np.mean(errors_slice[:, i]**2))
-    avg_mae += mae
-    avg_rmse += rmse
-    print(f"{params[i]} - MAE: {mae:.5f}, RMSE: {rmse:.5f}")
-avg_mae /= 3
-avg_rmse /= 3
-print(f"Mean - MAE: {avg_mae:.5f}, RMSE: {avg_rmse:.5f}")
-
-# Plot L2 Norms of predictions to determine if they deviate from 1
-# Calculate L2 Norms of the predictions
-predicted_norms = np.linalg.norm(preds_slice, axis=1)
-
-# Calculate Deviation from poincare unit sphere
-deviation_from_unity = np.abs(predicted_norms - 1)
-
-# Plot L2 Norm vs Time
-plt.figure(figsize=(12, 6))
-plt.plot(time_indices, predicted_norms, label='Predicted L2 Norm', color='green', linewidth=1.5)
-plt.axhline(y=1.0, color='black', linestyle='--', linewidth=2, label='Unit Sphere (Ideal = 1.0)')
-plt.title(f'Physical Consistency Check ({model_info})')
-plt.xlabel('Time Index')
-plt.ylabel('Vector Magnitude')
-plt.legend()
-plt.grid(True, alpha=0.5)
-plt.tight_layout()
-plt.savefig('MAMBA_s_parameter_norms.png')
-
-# Print Deviation Statistics
-mean_dev = np.mean(deviation_from_unity)
-max_dev = np.max(deviation_from_unity)
-
-print("Physical Validity Statistics:")
-print(f"Mean Deviation from Unit Norm: {mean_dev:.6f}")
-print(f"Max Deviation from Unit Norm:  {max_dev:.6f}")
+output_results(preds, actuals, split_idx, window_size, model_info, args, pred_len, n_plot=500)
