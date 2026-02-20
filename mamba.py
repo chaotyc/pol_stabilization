@@ -83,24 +83,60 @@ class MambaBlock(nn.Module):
         out = y * self.act(z_branch)
         return self.out_proj(out)
 
+# class PolarizationMamba(nn.Module):
+#     def __init__(self, input_dim: int, d_model: int, n_layers: int, pred_len: int = 1):
+#         super().__init__()
+#         self.pred_len = pred_len
+#         self.embedding = nn.Linear(input_dim, d_model)
+#         self.layers = nn.ModuleList([
+#             MambaBlock(d_model=d_model, d_state=16, d_conv=4, expand=2) 
+#             for _ in range(n_layers)
+#         ])
+#         self.norm_f = nn.LayerNorm(d_model)
+        
+#         self.head = nn.Linear(d_model, 3 * pred_len) 
+
+#     def forward(self, x):
+#         x = self.embedding(x)
+#         for layer in self.layers:
+#             x = layer(x) + x
+#         x = self.norm_f(x)
+        
+#         out = self.head(x[:, -1, :])
+#         return out.view(-1, self.pred_len, 3)
+
 class PolarizationMamba(nn.Module):
-    def __init__(self, input_dim: int, d_model: int, n_layers: int, pred_len: int = 1, dropout: float = 0.1):
+    def __init__(self, input_dim: int, d_model: int, n_layers: int, system: str, pred_len: int = 1):
         super().__init__()
         self.pred_len = pred_len
         self.embedding = nn.Linear(input_dim, d_model)
-        self.layers = nn.ModuleList([
-            MambaBlock(d_model=d_model, d_state=16, d_conv=4, expand=2) 
-            for _ in range(n_layers)
-        ])
-        self.norm_f = nn.LayerNorm(d_model)
         
+        self.layers = nn.ModuleList()
+        for _ in range(n_layers):
+            # If on Linux and has mamba-ssm package, use it
+            # Otherwise, fall back to the local PyTorch version
+            if system == "Linux":
+                print("Initializing Mamba Block (CUDA Optimized)")
+                from mamba_ssm import Mamba
+                self.layers.append(
+                    OfficialMamba(d_model=d_model, d_state=16, d_conv=4, expand=2)
+                )
+            else:
+                print("Initializing Mamba Block (PyTorch Implementation)")
+                
+                # Windows or fallback
+                self.layers.append(
+                    LocalMamba(d_model=d_model, d_state=16, d_conv=4, expand=2)
+                )
+
+        self.norm_f = nn.LayerNorm(d_model)
         self.head = nn.Linear(d_model, 3 * pred_len) 
 
     def forward(self, x):
         x = self.embedding(x)
         for layer in self.layers:
+            # Both blocks allow for the residual connection pattern
             x = layer(x) + x
         x = self.norm_f(x)
-        
         out = self.head(x[:, -1, :])
         return out.view(-1, self.pred_len, 3)

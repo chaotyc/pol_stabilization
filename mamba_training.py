@@ -8,9 +8,28 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from args import parse_args
-from mamba import MambaBlock, PolarizationMamba
+from mamba import PolarizationMamba
 from loss import AngularLoss, PoincareRegularizedMSE
 from plotting import output_results
+from plotting import output_results
+import platform
+
+# Check system OS for appropriate Mamba implementation
+system_os = platform.system()
+
+if system_os == "Linux":
+    try:
+        from mamba_ssm import Mamba
+        print("Using official mamba-ssm optimized CUDA kernels.")
+        using_pytorch = False
+    except ImportError:
+        print("Mamba package not found. Using pytorch implementation.")
+        from mamba import MambaBlock
+        using_pytorch = True
+else:
+    print("Windows detected. Using pytorch implementation.")
+    from mamba import MambaBlock
+    using_pytorch = True
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("PyTorch version:", torch.__version__)
