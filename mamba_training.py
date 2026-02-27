@@ -17,20 +17,6 @@ import platform
 # Check system OS for appropriate Mamba implementation
 system_os = platform.system()
 
-if system_os == "Linux":
-    try:
-        from mamba_ssm import Mamba
-        print("Using official mamba-ssm optimized CUDA kernels.")
-        using_pytorch = False
-    except ImportError:
-        print("Mamba package not found. Using pytorch implementation.")
-        from mamba import MambaBlock
-        using_pytorch = True
-else:
-    print("Windows detected. Using pytorch implementation.")
-    from mamba import MambaBlock
-    using_pytorch = True
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("PyTorch version:", torch.__version__)
 print("Current device:", device)
@@ -121,7 +107,7 @@ train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
 # Initialize Model
-model = PolarizationMamba(input_dim=3, d_model=args.dim, n_layers=args.layers, pred_len=args.pred_len).to(device)
+model = PolarizationMamba(input_dim=3, d_model=args.dim, n_layers=args.layers, system=system_os, pred_len=args.pred_len).to(device)
 optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
 criterion = loss_type
 

@@ -119,14 +119,14 @@ class PolarizationMamba(nn.Module):
                 print("Initializing Mamba Block (CUDA Optimized)")
                 from mamba_ssm import Mamba
                 self.layers.append(
-                    OfficialMamba(d_model=d_model, d_state=16, d_conv=4, expand=2)
+                    Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2)
                 )
             else:
                 print("Initializing Mamba Block (PyTorch Implementation)")
                 
                 # Windows or fallback
                 self.layers.append(
-                    LocalMamba(d_model=d_model, d_state=16, d_conv=4, expand=2)
+                    MambaBlock(d_model=d_model, d_state=16, d_conv=4, expand=2)
                 )
 
         self.norm_f = nn.LayerNorm(d_model)
