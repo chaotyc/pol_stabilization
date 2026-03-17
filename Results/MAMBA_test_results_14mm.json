@@ -1,0 +1,8 @@
+{
+  "wavelength_range": "14mm",
+  "test_mse": 0.05737762525677681,
+  "test_rmse": 0.23953627127593183,
+  "test_mae": 0.18169189989566803,
+  "best_val_loss": 0.01569631260339242,
+  "model_info": "16x3_LR1e-05_LossMSE_PL1_dataset14mm"
+}
