@@ -1,8 +1,9 @@
 {
   "wavelength_range": "10mm",
-  "test_mse": 0.026662081480026245,
-  "test_rmse": 0.16328527637244653,
-  "test_mae": 0.13781023025512695,
-  "best_val_loss": 0.0075899610350762675,
-  "model_info": "16x3_LR1e-05_LossMSE_PL1_dataset10mm"
+  "test_mse": 0.026942720636725426,
+  "test_rmse": 0.16414237916128005,
+  "test_mae": 0.13376501202583313,
+  "mean_deviation": 0.056590527296066284,
+  "best_val_loss": 0.042345010005174925,
+  "model_info": "16x3_LR1e-05_Lossregmse_PL1_dataset10mm"
 }

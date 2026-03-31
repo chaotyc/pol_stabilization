@@ -3,7 +3,7 @@ import scipy.io as sio
 import os
 
 # Define paths
-paths = [r'C:\Users\timch\Downloads\Research\fio_pol_stabilization\Datasets\03_02_2026400k_samples_txp_1551.5_pax_1565.496_polcon_and_fiber_2_1Hz.txt']
+paths = [r'C:\Users\timch\Downloads\Research\fio_pol_stabilization\Datasets\03_02_2026400k_samples_txp_1551.5_pax_1546.5_polcon_and_fiber_2_1Hz.txt']
 
 for path in paths:
     # Generate matlab file path
