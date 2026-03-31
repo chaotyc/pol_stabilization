@@ -7,24 +7,29 @@ class AngularLoss(nn.Module):
     Computation of loss based on angle difference between predicted and target polarization states.
     Measures the geodesic distance on the unit sphere between two vectors.
     """
-    def __init__(self):
+    def __init__(self, lambda_reg=0.02):
         super().__init__()
+        self.lambda_reg = lambda_reg
 
     def forward(self, input, target):
         # Project everything to the unit sphere
-        input_norm = F.normalize(input, p=2, dim=1)
-        target_norm = F.normalize(target, p=2, dim=1)
+        input_len = torch.norm(input, p=2, dim=-1)
+        input_norm = F.normalize(input, p=2, dim=-1)
+        target_norm = F.normalize(target, p=2, dim=-1)
 
-        # Compute Cosine Similarity of u and v (dot product)
-        cos_sim = (input_norm * target_norm).sum(dim=1)
+        # Compute Cosine Similarity
+        cos_sim = (input_norm * target_norm).sum(dim=-1)
         
-        # Compute angle theta = arccos(<u, v>)
-        theta = torch.acos(cos_sim)
+        # Calculate Cosine Distance (1 - cos_sim)
+        # Perfectly aligned = 0 loss. Opposite = 2 loss.
+        cos_loss = 1.0 - cos_sim
         
-        return theta.mean()
+        norm_loss = ((input_len - 1.0) ** 2)
+        
+        return cos_loss.mean() + self.lambda_reg * norm_loss.mean()
     
 class PoincareRegularizedMSE(nn.Module):
-    def __init__(self, lambda_reg=0.1):
+    def __init__(self, lambda_reg=0.2):
         super().__init__()
         self.lambda_reg = lambda_reg
         self.mse_loss = nn.MSELoss()

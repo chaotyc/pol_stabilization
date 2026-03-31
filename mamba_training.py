@@ -86,7 +86,7 @@ if __name__ == '__main__':
     features = np.column_stack([s1_txp, s2_txp, s3_txp])
     targets = np.column_stack([s1_pax, s2_pax, s3_pax])
 
-    # for data testing, take first 100k subset
+    # # for data testing, take first 100k subset
     MAX_SAMPLES = 100000
     features = features[:MAX_SAMPLES]
     targets = targets[:MAX_SAMPLES]
@@ -123,6 +123,8 @@ if __name__ == '__main__':
     best_val_loss = float('inf')
     best_model_path = f'best_model_MAMBA.pt'
 
+    # patience = 10
+    # static_epochs = 0
     for epoch in range(epochs):
         model.train()
         batch_losses = []
@@ -162,6 +164,19 @@ if __name__ == '__main__':
             tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | * Best model saved")
         else:
             tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f}")
+        
+        # if val_loss < best_val_loss:
+        #     best_val_loss = val_loss
+        #     static_epochs = 0
+        #     torch.save(model.state_dict(), best_model_path)
+        #     tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | * Best model saved")
+        # else:
+        #     static_epochs += 1
+        #     tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | No improvement for {epochs_no_improve} epochs")
+            
+        #     if static_epochs >= patience:
+        #         print(f"Early stopping triggered at epoch {epoch+1}!")
+        #         break
 
     model_info = f"{args.dim}x{args.layers}_LR{lr}_Loss{args.loss}_PL{pred_len}_dataset{args.wavelength_range}"
 

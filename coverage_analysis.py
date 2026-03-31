@@ -35,9 +35,9 @@ def analyze_degree_coverage(s1, s2, s3):
     return pct_ge_1, pct_ge_2
 
 # load data
-path = "Datasets/3.5m_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_1Hz.mat"
+path = r'Datasets\03_02_2026400k_samples_txp_1551.5_pax_1565.496_polcon_and_fiber_2_1Hz.mat'
 data = scipy.io.loadmat(path)
-data = {k: v[:500000] for k, v in data.items() if isinstance(v, np.ndarray)}
+data = {k: v.flatten()[:400000] for k, v in data.items() if isinstance(v, np.ndarray)}
 
 # analyze PAX
 pax_1, pax_2 = analyze_degree_coverage(
