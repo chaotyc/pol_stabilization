@@ -53,10 +53,28 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--weight-decay",
+        type=float,
+        default=1e-5,
+        help="Weight decay (L2 penalty) for AdamW optimizer",
+    )
+    parser.add_argument(
+        "--lambda-reg",
+        type=float,
+        default=None,
+        help="Regularization strength for RegMSE/Angular loss (default: 0.2 for RegMSE, 0.02 for Angular)",
+    )
+    parser.add_argument(
         "--wavelength-range",
         type=str,
         default="5mm",
         help="Wavelength difference for the dataset (e.g., '1mm', '5mm')",
+    )
+    parser.add_argument(
+        "--run-id",
+        type=str,
+        default=None,
+        help="Unique run identifier for output files (used by HPO sweeps)",
     )
 
     return parser.parse_args()
