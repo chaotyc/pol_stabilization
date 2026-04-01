@@ -50,9 +50,13 @@ if __name__ == '__main__':
     lr = args.lr
     delta_lambda = args.wavelength_range
 
-    loss_type = {"mse": nn.MSELoss(),
-                "regmse": PoincareRegularizedMSE(lambda_reg=0.1),
-                "angular": AngularLoss()}[args.loss.lower()]
+    lambda_reg = args.lambda_reg
+    loss_constructors = {
+        "mse": lambda: nn.MSELoss(),
+        "regmse": lambda: PoincareRegularizedMSE(lambda_reg=lambda_reg if lambda_reg is not None else 0.2),
+        "angular": lambda: AngularLoss(lambda_reg=lambda_reg if lambda_reg is not None else 0.02),
+    }
+    loss_type = loss_constructors[args.loss.lower()]()
 
     if delta_lambda == "1mm":
         path = "Datasets/07_19_2025100k_samples_txp_1551.5_pax_1552.5_polcon_and_fiber_1Hz.mat"
@@ -112,7 +116,7 @@ if __name__ == '__main__':
 
     # Initialize Model
     model = PolarizationMamba(input_dim=3, d_model=args.dim, n_layers=args.layers, system=system_os, pred_len=args.pred_len).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=args.weight_decay)
     criterion = loss_type
 
     print(f"Model Parameters: {sum(p.numel() for p in model.parameters())}")
@@ -121,7 +125,7 @@ if __name__ == '__main__':
     # Training Loop
     train_losses, val_losses = [], []
     best_val_loss = float('inf')
-    best_model_path = f'best_model_MAMBA.pt'
+    best_model_path = 'Results/best_model_MAMBA.pt'
 
     patience = 10
     static_epochs = 0
@@ -171,7 +175,8 @@ if __name__ == '__main__':
                 print(f"Early stopping triggered at epoch {epoch+1}!")
                 break
 
-    model_info = f"{args.dim}x{args.layers}_LR{lr}_Loss{args.loss}_PL{pred_len}_dataset{args.wavelength_range}"
+    run_tag = f"_{args.run_id}" if args.run_id else ""
+    model_info = f"{args.dim}x{args.layers}_LR{lr}_Loss{args.loss}_PL{pred_len}_dataset{args.wavelength_range}{run_tag}"
 
     # Training Convergence Plot
     plt.figure(figsize=(10, 6))
@@ -182,7 +187,7 @@ if __name__ == '__main__':
     plt.title(f'MAMBA Training Convergence\n({model_info})')
     plt.legend()
     plt.grid(True)
-    plt.savefig(f'MAMBA_convergence_{model_info}.png')
+    plt.savefig(f'Results/MAMBA_convergence_{model_info}.png')
 
     # Load best validation model for final evaluation
     model.load_state_dict(torch.load(best_model_path, weights_only=True))
@@ -220,8 +225,7 @@ if __name__ == '__main__':
         'best_val_loss': float(best_val_loss),
         'model_info': model_info,
     }
-    os.makedirs('Results', exist_ok=True)
-    metrics_path = f'Results/MAMBA_test_results_{delta_lambda}.json'
+    metrics_path = f'Results/MAMBA_test_results_{delta_lambda}{run_tag}.json'
     with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=2)
     print(f"Test metrics saved to {metrics_path}")

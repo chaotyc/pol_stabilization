@@ -42,7 +42,7 @@ def output_results(preds, actuals, split_idx, window_size, model_info, args, pre
             plt.grid(True, alpha=0.5)
 
         plt.tight_layout()
-        plt.savefig(f'MAMBA_predictions_{model_info}.png')
+        plt.savefig(f'Results/MAMBA_predictions_{model_info}.png')
 
         # Calculate Squared Errors
         squared_errors = (preds - actuals) ** 2
@@ -69,7 +69,7 @@ def output_results(preds, actuals, split_idx, window_size, model_info, args, pre
         plt.xlabel('Prediction Step')
         plt.ylabel('RMSE')
         plt.grid(True)
-        plt.savefig('error_over_preds.png')
+        plt.savefig(f'Results/error_over_preds.png')
 
         # calculate deviation from norm
         # Plot L2 Norms of predictions to determine if they deviate from 1
@@ -89,7 +89,7 @@ def output_results(preds, actuals, split_idx, window_size, model_info, args, pre
         plt.legend()
         plt.grid(True, alpha=0.5)
         plt.tight_layout()
-        plt.savefig('MAMBA_s_parameter_norms.png')
+        plt.savefig(f'Results/MAMBA_s_parameter_norms.png')
 
         # Print Deviation Statistics
         mean_dev = np.mean(deviation_from_unity)
@@ -131,7 +131,7 @@ def output_results(preds, actuals, split_idx, window_size, model_info, args, pre
             plt.grid(True, alpha=0.5)
 
         plt.tight_layout()
-        plt.savefig(f'MAMBA_predictions_{model_info}.png')
+        plt.savefig(f'Results/MAMBA_predictions_{model_info}.png')
 
         # Print Statistics for the slice
         print("\n Statistics:")
@@ -164,7 +164,7 @@ def output_results(preds, actuals, split_idx, window_size, model_info, args, pre
         plt.legend()
         plt.grid(True, alpha=0.5)
         plt.tight_layout()
-        plt.savefig('MAMBA_s_parameter_norms.png')
+        plt.savefig(f'Results/MAMBA_s_parameter_norms.png')
 
         # Print Deviation Statistics
         mean_dev = np.mean(deviation_from_unity)
