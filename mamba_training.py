@@ -13,6 +13,19 @@ from mamba import PolarizationMamba
 from loss import AngularLoss, PoincareRegularizedMSE
 from plotting import output_results
 import platform
+import random
+
+def set_seed(seed: int = 42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed) 
+    # Optional: forces deterministic algorithms (can slow down training slightly)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False 
+
+set_seed(42)
 
 # Check system OS for appropriate Mamba implementation
 system_os = platform.system()
@@ -90,7 +103,7 @@ if __name__ == '__main__':
     features = np.column_stack([s1_txp, s2_txp, s3_txp])
     targets = np.column_stack([s1_pax, s2_pax, s3_pax])
 
-    # # for data testing, take first 100k subset
+    # for data testing, take first 100k subset
     MAX_SAMPLES = 100000
     features = features[:MAX_SAMPLES]
     targets = targets[:MAX_SAMPLES]
@@ -216,11 +229,26 @@ if __name__ == '__main__':
     test_mae = float(np.mean(np.abs(preds - actuals)))
     pred_norms = np.linalg.norm(preds.reshape(-1, 3), axis=1)
     mean_deviation = float(np.mean(np.abs(pred_norms - 1.0)))
+
+
+    # Force normalization of predictions to poincare sphere and calculate metrics
+    preds_flat = preds.reshape(-1, 3)
+    actuals_flat = actuals.reshape(-1, 3)
+    norms = np.linalg.norm(preds_flat, axis=1, keepdims=True)
+    norms = np.clip(norms, 1e-8, None)
+    preds_normed = (preds_flat / norms).reshape(preds.shape)
+    norm_mse = float(np.mean((preds_normed - actuals) ** 2))
+    norm_rmse = float(np.sqrt(norm_mse))
+    norm_mae = float(np.mean(np.abs(preds_normed - actuals)))
+
     metrics = {
         'wavelength_range': delta_lambda,
         'test_mse': test_mse,
         'test_rmse': test_rmse,
         'test_mae': test_mae,
+        'norm_test_mse': norm_mse,
+        'norm_test_rmse': norm_rmse,
+        'norm_test_mae': norm_mae,
         'mean_deviation': mean_deviation,
         'best_val_loss': float(best_val_loss),
         'model_info': model_info,
