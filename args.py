@@ -68,13 +68,13 @@ def parse_args():
         "--wavelength-range",
         type=str,
         default="5mm",
-        help="Wavelength difference for the dataset (e.g., '1mm', '5mm')",
+        help="Wavelength difference for the dataset (e.g., '1mm', '5mm', '10mm', '14mm', '-5mm')",
     )
     parser.add_argument(
         "--run-id",
         type=str,
         default=None,
-        help="Unique run identifier for output files (used by HPO sweeps)",
+        help="Unique run identifier for output files (used for hyperparameter tuning)",
     )
 
     return parser.parse_args()

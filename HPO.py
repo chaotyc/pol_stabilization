@@ -2,14 +2,12 @@ import argparse
 import json
 import subprocess
 import uuid
-
 import optuna
 
 
 def objective(trial, wavelength_range, epochs, loss):
     lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
-    dim = trial.suggest_categorical("dim", [8, 16, 32])
-    layers = trial.suggest_int("layers", 1, 5)
+    dim = trial.suggest_categorical("dim", [8, 16, 32, 64])
     window_size = trial.suggest_categorical("window_size", [2, 4, 8, 16, 32, 64])
     batch_size = trial.suggest_categorical("batch_size", [32, 64, 128, 256])
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
@@ -25,7 +23,6 @@ def objective(trial, wavelength_range, epochs, loss):
         "python", "mamba_training.py",
         "--lr", str(lr),
         "--dim", str(dim),
-        "--layers", str(layers),
         "--window-size", str(window_size),
         "--batch-size", str(batch_size),
         "--loss", loss,
@@ -54,7 +51,7 @@ def objective(trial, wavelength_range, epochs, loss):
         if isinstance(val, (int, float)):
             trial.set_user_attr(key, val)
 
-    return metrics["test_mse"]
+    return metrics["best_val_loss"]
 
 
 def main():
@@ -82,9 +79,6 @@ def main():
         n_trials=args.n_trials,
     )
 
-    print("\n" + "=" * 60)
-    print("SWEEP COMPLETE")
-    print("=" * 60)
     print(f"Best trial #{study.best_trial.number}")
     print(f"  Test MSE: {study.best_trial.value:.6f}")
     print("  Params:")

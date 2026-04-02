@@ -21,11 +21,26 @@ class MambaBlock(nn.Module):
 
         self.x_proj = nn.Linear(self.d_inner, self.dt_rank + d_state * 2, bias=False)
         self.dt_proj = nn.Linear(self.dt_rank, self.d_inner, bias=True)
+        dt_init_std = self.dt_rank**-0.5
+        nn.init.uniform_(self.dt_proj.weight, -dt_init_std, dt_init_std)
 
+        # Initialize dt bias so that F.softplus(dt_bias) is between dt_min and dt_max
+        dt = torch.exp(
+            torch.rand(self.d_inner) * (math.log(dt_max) - math.log(dt_min)) + math.log(dt_min)
+        ).clamp(min=dt_init_floor)
+        
+        # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
+        inv_dt = dt + torch.log(-torch.expm1(-dt))
+        with torch.no_grad():
+            self.dt_proj.bias.copy_(inv_dt)
         # Initialize A parameter
         A = torch.arange(1, d_state + 1, dtype=torch.float32).repeat(self.d_inner, 1)
         self.A_log = nn.Parameter(torch.log(A))
+        self.A_log._no_weight_decay = True # Keep A_log out of optimizer weight decay
+
         self.D = nn.Parameter(torch.ones(self.d_inner))
+        self.D._no_weight_decay = True # Keep D out of optimizer weight decay
+
         self.out_proj = nn.Linear(self.d_inner, d_model, bias=False)
 
     def forward(self, x):

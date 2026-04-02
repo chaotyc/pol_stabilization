@@ -1,9 +1,12 @@
 {
   "wavelength_range": "5mm",
-  "test_mse": 0.005398695822805166,
-  "test_rmse": 0.07347581794580559,
-  "test_mae": 0.05914055183529854,
-  "mean_deviation": 0.010670449584722519,
-  "best_val_loss": 0.003355556277218601,
+  "test_mse": 0.0498431921005249,
+  "test_rmse": 0.2232558892851987,
+  "test_mae": 0.18147240579128265,
+  "norm_test_mse": 0.05053064227104187,
+  "norm_test_rmse": 0.22479021836156898,
+  "norm_test_mae": 0.18239063024520874,
+  "mean_deviation": 0.020416542887687683,
+  "best_val_loss": 0.05204656173139811,
   "model_info": "16x3_LR1e-05_LossMSE_PL1_dataset5mm"
 }
