@@ -21,7 +21,7 @@ def run_hpo(wavelength_range, n_trials, epochs, loss):
     study_name = f"mamba_{wavelength_range}"
     cmd = [
         sys.executable, "HPO.py",
-        "--wavelength-range", wavelength_range,
+        f"--wavelength-range={wavelength_range}",
         "--n-trials", str(n_trials),
         "--epochs", str(epochs),
         "--loss", loss,
@@ -50,7 +50,7 @@ def run_hpo(wavelength_range, n_trials, epochs, loss):
 def run_final_training(wavelength_range, params, epochs, loss):
     cmd = [
         sys.executable, "mamba_training.py",
-        "--wavelength-range", wavelength_range,
+        f"--wavelength-range={wavelength_range}",
         "--lr", str(params["lr"]),
         "--dim", str(params["dim"]),
         "--window-size", str(params["window_size"]),
@@ -86,31 +86,42 @@ def load_results():
 
 def plot_results(results):
     sorted_keys = sorted(results.keys(), key=lambda k: results[k]["delta_nm"])
-    deltas = [results[k]["delta_nm"] for k in sorted_keys]
-    rmses  = [results[k]["test_rmse"] for k in sorted_keys]
-    devs   = [results[k]["mean_deviation"] for k in sorted_keys]
+    deltas      = [results[k]["delta_nm"] for k in sorted_keys]
+    rmses       = [results[k]["test_rmse"] for k in sorted_keys]
+    norm_rmses  = [results[k]["norm_test_rmse"] for k in sorted_keys]
+    devs        = [results[k]["mean_deviation"] for k in sorted_keys]
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
-    ax1.plot(deltas, rmses, marker="o", linewidth=2, markersize=8, color="#d62728")
-    ax1.set_xlabel(r"$\Delta\lambda$ (nm)", fontsize=12)
-    ax1.set_ylabel("Test RMSE", fontsize=12)
-    ax1.set_title(r"Mean RMSE vs $\Delta\lambda$", fontsize=13)
-    ax1.set_xticks(deltas)
-    ax1.grid(True, alpha=0.4)
+    axes[0].plot(deltas, rmses, marker="o", linewidth=2, markersize=8, color="#d62728")
+    axes[0].set_xlabel(r"$\Delta\lambda$ (nm)", fontsize=12)
+    axes[0].set_ylabel("Test RMSE", fontsize=12)
+    axes[0].set_title(r"RMSE vs $\Delta\lambda$", fontsize=13)
+    axes[0].set_xticks(deltas)
+    axes[0].grid(True, alpha=0.4)
     for x, y in zip(deltas, rmses):
-        ax1.annotate(f"{y:.4f}", (x, y), textcoords="offset points",
-                     xytext=(0, 10), ha="center", fontsize=9)
+        axes[0].annotate(f"{y:.4f}", (x, y), textcoords="offset points",
+                         xytext=(0, 10), ha="center", fontsize=9)
 
-    ax2.plot(deltas, devs, marker="s", linewidth=2, markersize=8, color="#1f77b4")
-    ax2.set_xlabel(r"$\Delta\lambda$ (nm)", fontsize=12)
-    ax2.set_ylabel("Mean Deviation from Unit Norm", fontsize=12)
-    ax2.set_title(r"Mean Deviation vs $\Delta\lambda$", fontsize=13)
-    ax2.set_xticks(deltas)
-    ax2.grid(True, alpha=0.4)
+    axes[1].plot(deltas, norm_rmses, marker="D", linewidth=2, markersize=8, color="#2ca02c")
+    axes[1].set_xlabel(r"$\Delta\lambda$ (nm)", fontsize=12)
+    axes[1].set_ylabel("Normalized RMSE", fontsize=12)
+    axes[1].set_title(r"Norm RMSE vs $\Delta\lambda$", fontsize=13)
+    axes[1].set_xticks(deltas)
+    axes[1].grid(True, alpha=0.4)
+    for x, y in zip(deltas, norm_rmses):
+        axes[1].annotate(f"{y:.4f}", (x, y), textcoords="offset points",
+                         xytext=(0, 10), ha="center", fontsize=9)
+
+    axes[2].plot(deltas, devs, marker="s", linewidth=2, markersize=8, color="#1f77b4")
+    axes[2].set_xlabel(r"$\Delta\lambda$ (nm)", fontsize=12)
+    axes[2].set_ylabel("Mean Deviation from Unit Norm", fontsize=12)
+    axes[2].set_title(r"Mean Deviation vs $\Delta\lambda$", fontsize=13)
+    axes[2].set_xticks(deltas)
+    axes[2].grid(True, alpha=0.4)
     for x, y in zip(deltas, devs):
-        ax2.annotate(f"{y:.4f}", (x, y), textcoords="offset points",
-                     xytext=(0, 10), ha="center", fontsize=9)
+        axes[2].annotate(f"{y:.4f}", (x, y), textcoords="offset points",
+                         xytext=(0, 10), ha="center", fontsize=9)
 
     fig.suptitle("MAMBA Test Error vs Wavelength Separation", fontsize=15, y=1.02)
     plt.tight_layout()
@@ -158,12 +169,12 @@ def main():
     print(f"\n{'=' * 60}")
     print("  Summary (best HPO params → final training)")
     print(f"{'=' * 60}")
-    print(f"{'Dataset':<10} {'RMSE':>10} {'Mean Dev':>10} {'Best Val':>10}")
-    print("-" * 42)
+    print(f"{'Dataset':<10} {'RMSE':>10} {'Norm RMSE':>10} {'Mean Dev':>10} {'Best Val':>10}")
+    print("-" * 52)
     for k in sorted(results, key=lambda k: results[k]["delta_nm"]):
         r = results[k]
-        print(f"{k:<10} {r['test_rmse']:>10.6f} {r['mean_deviation']:>10.6f} "
-              f"{r['best_val_loss']:>10.6f}")
+        print(f"{k:<10} {r['test_rmse']:>10.6f} {r['norm_test_rmse']:>10.6f} "
+              f"{r['mean_deviation']:>10.6f} {r['best_val_loss']:>10.6f}")
 
     plot_results(results)
 
