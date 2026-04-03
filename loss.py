@@ -43,3 +43,17 @@ class PoincareRegularizedMSE(nn.Module):
         reg = ((input_norm - 1) ** 2).mean()
         
         return mse + self.lambda_reg * reg
+
+class Infidelity(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, input, target):
+        """
+        input: (batch, 3) - The model's predicted Stokes vector (must be L2 normalized)
+        target: (batch, 3) - The target quantum Stokes vector (must be L2 normalized)
+        """
+        dot_product = torch.sum(input * target, dim=-1)
+        fidelity = 0.5 * (1.0 + dot_product)
+        infidelity = 1.0 - fidelity
+        return torch.mean(infidelity)

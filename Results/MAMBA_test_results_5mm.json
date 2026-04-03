@@ -1,12 +1,12 @@
 {
   "wavelength_range": "5mm",
-  "test_mse": 0.0498431921005249,
-  "test_rmse": 0.2232558892851987,
-  "test_mae": 0.18147240579128265,
-  "norm_test_mse": 0.05053064227104187,
-  "norm_test_rmse": 0.22479021836156898,
-  "norm_test_mae": 0.18239063024520874,
-  "mean_deviation": 0.020416542887687683,
-  "best_val_loss": 0.05204656173139811,
-  "model_info": "16x3_LR1e-05_LossMSE_PL1_dataset5mm"
+  "test_mse": 0.005635568872094154,
+  "test_rmse": 0.0750704260817411,
+  "test_mae": 0.05941193178296089,
+  "norm_test_mse": 0.005631331820040941,
+  "norm_test_rmse": 0.07504220026119264,
+  "norm_test_mae": 0.05913633480668068,
+  "mean_deviation": 0.007569991983473301,
+  "best_val_loss": 0.0032347655804815163,
+  "model_info": "8x3_LR0.0008440377885360139_LossMSE_PL1_dataset5mm"
 }

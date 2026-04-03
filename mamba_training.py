@@ -10,10 +10,18 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from args import parse_args
 from mamba import PolarizationMamba
-from loss import AngularLoss, PoincareRegularizedMSE
+from loss import AngularLoss, PoincareRegularizedMSE, Infidelity
 from plotting import output_results
 import platform
 import random
+
+# Check system OS for appropriate Mamba implementation
+system_os = platform.system()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("PyTorch version:", torch.__version__)
+print("Current device:", device)
+torch.backends.cudnn.benchmark = True # Optimizes performance for fixed input sizes
 
 def set_seed(seed: int = 42):
     random.seed(seed)
@@ -24,16 +32,6 @@ def set_seed(seed: int = 42):
     # Optional: forces deterministic algorithms (can slow down training slightly)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False 
-
-set_seed(42)
-
-# Check system OS for appropriate Mamba implementation
-system_os = platform.system()
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("PyTorch version:", torch.__version__)
-print("Current device:", device)
-torch.backends.cudnn.benchmark = True # Optimizes performance for fixed input sizes
 
 class SParameterDataset(Dataset):
     def __init__(self, features, targets, window_size, pred_len):
@@ -54,6 +52,9 @@ class SParameterDataset(Dataset):
         return x, y
 
 if __name__ == '__main__':
+    # Set seed for reproducibility
+    set_seed(42)
+    
     # Parse Arguments
     args = parse_args()
     window_size = args.window_size
@@ -241,6 +242,14 @@ if __name__ == '__main__':
     norm_rmse = float(np.sqrt(norm_mse))
     norm_mae = float(np.mean(np.abs(preds_normed - actuals)))
 
+    # Fidelity evaluation (1 - infidelity) on normalized predictions
+    infidelity_fn = Infidelity()
+    preds_normed_t = torch.from_numpy(preds_normed.reshape(-1, 3)).float()
+    actuals_t = torch.from_numpy(actuals.reshape(-1, 3)).float()
+    mean_infidelity = infidelity_fn(preds_normed_t, actuals_t).item()
+    mean_fidelity = 1.0 - mean_infidelity
+    print(f"Test Fidelity: {mean_fidelity:.6f}")
+
     metrics = {
         'wavelength_range': delta_lambda,
         'test_mse': test_mse,
@@ -250,6 +259,7 @@ if __name__ == '__main__':
         'norm_test_rmse': norm_rmse,
         'norm_test_mae': norm_mae,
         'mean_deviation': mean_deviation,
+        'mean_fidelity': mean_fidelity,
         'best_val_loss': float(best_val_loss),
         'model_info': model_info,
     }
