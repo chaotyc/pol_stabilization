@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import sys
 import os
@@ -17,33 +18,17 @@ DATASETS = {
 HPO_DB = "sqlite:///optuna_study.db"
 
 
-def run_hpo(wavelength_range, n_trials, epochs, loss):
+def load_best_params(wavelength_range, db):
     study_name = f"mamba_{wavelength_range}"
-    cmd = [
-        sys.executable, "HPO.py",
-        f"--wavelength-range={wavelength_range}",
-        "--n-trials", str(n_trials),
-        "--epochs", str(epochs),
-        "--loss", loss,
-        "--study-name", study_name,
-        "--db", HPO_DB,
-    ]
-
-    print(f"\n{'=' * 60}")
-    print(f"  HPO: delta_lambda = {wavelength_range}  ({n_trials} trials)")
-    print(f"{'=' * 60}\n")
-
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        print(f"HPO failed for {wavelength_range} (exit code {result.returncode})")
+    try:
+        study = optuna.load_study(study_name=study_name, storage=db)
+    except KeyError:
+        print(f"No study found for '{study_name}' in {db}")
         return None
 
-    study = optuna.load_study(study_name=study_name, storage=HPO_DB)
     best = study.best_trial
-    print(f"\nBest trial #{best.number} for {wavelength_range}:")
-    print(f"  val_loss = {best.value:.6f}")
-    for k, v in best.params.items():
-        print(f"  {k}: {v}")
+    print(f"  {wavelength_range}: trial #{best.number}  val_loss={best.value:.6f}  "
+          + "  ".join(f"{k}={v}" for k, v in best.params.items()))
     return best.params
 
 
@@ -131,33 +116,38 @@ def plot_results(results):
 
 
 def main():
-    import argparse
-    parser = argparse.ArgumentParser(description="Run HPO + final training for all datasets")
-    parser.add_argument("--n-trials", type=int, default=50,
-                        help="Optuna trials per dataset")
-    parser.add_argument("--hpo-epochs", type=int, default=100,
-                        help="Max epochs per HPO trial")
-    parser.add_argument("--final-epochs", type=int, default=100,
+    parser = argparse.ArgumentParser(
+        description="Load best HPO params from Optuna DB and run final evaluation for all datasets")
+    parser.add_argument("--epochs", type=int, default=100,
                         help="Max epochs for the final training run")
     parser.add_argument("--loss", type=str, default="MSE",
                         choices=["MSE", "RegMSE", "Angular"])
+    parser.add_argument("--db", type=str, default=HPO_DB,
+                        help="Optuna storage URL")
     cli_args = parser.parse_args()
 
-    best_params = {}
+    print(f"{'=' * 60}")
+    print("  Loading best params from Optuna DB")
+    print(f"{'=' * 60}")
 
+    best_params = {}
     for wl_name in sorted(DATASETS, key=lambda k: DATASETS[k]):
-        params = run_hpo(wl_name, cli_args.n_trials, cli_args.hpo_epochs, cli_args.loss)
+        params = load_best_params(wl_name, cli_args.db)
         if params is None:
-            print(f"Skipping {wl_name} — HPO failed.")
+            print(f"  Skipping {wl_name} — no study found.")
             continue
         best_params[wl_name] = params
 
+    if not best_params:
+        print("No best params found in DB. Run HPO first.")
+        return
+
     print(f"\n{'=' * 60}")
-    print("  HPO complete — running final training with best params")
+    print("  Running final training with best params")
     print(f"{'=' * 60}")
 
     for wl_name, params in best_params.items():
-        retcode = run_final_training(wl_name, params, cli_args.final_epochs, cli_args.loss)
+        retcode = run_final_training(wl_name, params, cli_args.epochs, cli_args.loss)
         if retcode != 0:
             print(f"Final training failed for {wl_name} (exit code {retcode}), skipping.")
 

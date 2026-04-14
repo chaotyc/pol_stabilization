@@ -10,12 +10,6 @@ def parse_args():
         help="Size of the input window for the model",
     )
     parser.add_argument(
-        "--pred-len",
-        type=int,
-        default=1,
-        help="Length of the prediction output",
-    )
-    parser.add_argument(
         "--epochs",
         type=int,
         default=20,
