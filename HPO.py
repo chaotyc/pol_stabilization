@@ -27,7 +27,7 @@ def objective(trial, wavelength_range, epochs, loss):
         "--batch-size", str(batch_size),
         "--loss", loss,
         "--weight-decay", str(weight_decay),
-        "--wavelength-range", wavelength_range,
+        f"--wavelength-range={wavelength_range}",
         "--epochs", str(epochs),
         "--run-id", run_id,
         *lambda_reg_args,

@@ -34,21 +34,17 @@ def set_seed(seed: int = 42):
     torch.backends.cudnn.benchmark = False 
 
 class SParameterDataset(Dataset):
-    def __init__(self, features, targets, window_size, pred_len):
+    def __init__(self, features, targets, window_size):
         self.features = torch.FloatTensor(features)
         self.targets = torch.FloatTensor(targets)
         self.window_size = window_size
-        self.pred_len = pred_len 
 
     def __len__(self):
-        return len(self.features) - self.window_size - self.pred_len + 1
+        return len(self.features) - self.window_size
 
     def __getitem__(self, idx):
         x = self.features[idx : idx + self.window_size]
-        
-        start_idx = idx + self.window_size
-        y = self.targets[start_idx : start_idx + self.pred_len]
-        
+        y = self.targets[idx + self.window_size].unsqueeze(0)
         return x, y
 
 if __name__ == '__main__':
@@ -58,7 +54,6 @@ if __name__ == '__main__':
     # Parse Arguments
     args = parse_args()
     window_size = args.window_size
-    pred_len = args.pred_len
     epochs = args.epochs
     batch_size = args.batch_size
     lr = args.lr
@@ -120,16 +115,16 @@ if __name__ == '__main__':
     test_targets = targets[val_end:]
 
     # Prepare Data
-    train_set = SParameterDataset(train_features, train_targets, window_size, pred_len)
-    val_set = SParameterDataset(val_features, val_targets, window_size, pred_len)
-    test_set = SParameterDataset(test_features, test_targets, window_size, pred_len)
+    train_set = SParameterDataset(train_features, train_targets, window_size)
+    val_set = SParameterDataset(val_features, val_targets, window_size)
+    test_set = SParameterDataset(test_features, test_targets, window_size)
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True)
     val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, pin_memory=True)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, pin_memory=True)
 
     # Initialize Model
-    model = PolarizationMamba(input_dim=3, d_model=args.dim, n_layers=args.layers, system=system_os, pred_len=args.pred_len).to(device)
+    model = PolarizationMamba(input_dim=3, d_model=args.dim, n_layers=args.layers, system=system_os).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=args.weight_decay)
     criterion = loss_type
 
@@ -190,7 +185,7 @@ if __name__ == '__main__':
                 break
 
     run_tag = f"_{args.run_id}" if args.run_id else ""
-    model_info = f"{args.dim}x{args.layers}_LR{lr}_Loss{args.loss}_PL{pred_len}_dataset{args.wavelength_range}{run_tag}"
+    model_info = f"{args.dim}x{args.layers}_LR{lr}_Loss{args.loss}_dataset{args.wavelength_range}{run_tag}"
 
     # Training Convergence Plot
     plt.figure(figsize=(10, 6))
@@ -222,7 +217,7 @@ if __name__ == '__main__':
     # Number of points plotted (starting at end of training data)
     N_PLOT = 1000
 
-    output_results(preds, actuals, val_end, window_size, model_info, args, pred_len, N_PLOT)
+    output_results(preds, actuals, val_end, window_size, model_info, N_PLOT)
 
     # Save test metrics for sweep analysis
     test_mse = float(np.mean((preds - actuals) ** 2))
@@ -238,9 +233,9 @@ if __name__ == '__main__':
     norms = np.linalg.norm(preds_flat, axis=1, keepdims=True)
     norms = np.clip(norms, 1e-8, None)
     preds_normed = (preds_flat / norms).reshape(preds.shape)
-    norm_mse = float(np.mean((preds_normed - actuals) ** 2))
-    norm_rmse = float(np.sqrt(norm_mse))
-    norm_mae = float(np.mean(np.abs(preds_normed - actuals)))
+    # norm_mse = float(np.mean((preds_normed - actuals) ** 2))
+    # norm_rmse = float(np.sqrt(norm_mse))
+    # norm_mae = float(np.mean(np.abs(preds_normed - actuals)))
 
     # Fidelity evaluation (1 - infidelity) on normalized predictions
     infidelity_fn = Infidelity()
@@ -255,9 +250,9 @@ if __name__ == '__main__':
         'test_mse': test_mse,
         'test_rmse': test_rmse,
         'test_mae': test_mae,
-        'norm_test_mse': norm_mse,
-        'norm_test_rmse': norm_rmse,
-        'norm_test_mae': norm_mae,
+        # 'norm_test_mse': norm_mse,
+        # 'norm_test_rmse': norm_rmse,
+        # 'norm_test_mae': norm_mae,
         'mean_deviation': mean_deviation,
         'mean_fidelity': mean_fidelity,
         'best_val_loss': float(best_val_loss),

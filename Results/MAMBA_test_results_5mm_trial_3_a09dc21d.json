@@ -1,9 +1,0 @@
-{
-  "wavelength_range": "5mm",
-  "test_mse": 0.005291796755045652,
-  "test_rmse": 0.07274473695770473,
-  "test_mae": 0.05633389577269554,
-  "mean_deviation": 0.0070978812873363495,
-  "best_val_loss": 0.007466884271707386,
-  "model_info": "8x5_LR9.370779609600486e-05_LossRegMSE_PL1_dataset5mm_trial_3_a09dc21d"
-}
