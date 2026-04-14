@@ -125,7 +125,28 @@ if __name__ == '__main__':
 
     # Initialize Model
     model = PolarizationMamba(input_dim=3, d_model=args.dim, n_layers=args.layers, system=system_os).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+
+    # Select which parameters to decay (only the weight matrices)
+    decay_params = []
+    no_decay_params = []
+
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        
+        # Exclude 1D parameters (Biases, LayerNorm) and custom flagged params (A_log, D)
+        if param.ndim <= 1 or getattr(param, "_no_weight_decay", False):
+            no_decay_params.append(param)
+        else:
+            decay_params.append(param)
+
+    optim_groups = [
+        {"params": decay_params, "weight_decay": args.weight_decay},
+        {"params": no_decay_params, "weight_decay": 0.0},
+    ]
+
+    optimizer = torch.optim.AdamW(optim_groups, lr=lr)
+
     criterion = loss_type
 
     print(f"Model Parameters: {sum(p.numel() for p in model.parameters())}")
