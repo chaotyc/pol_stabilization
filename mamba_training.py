@@ -1,6 +1,5 @@
 import os
 import json
-import math
 import scipy.io
 import numpy as np
 import torch
@@ -64,6 +63,7 @@ if __name__ == '__main__':
         "mse": lambda: nn.MSELoss(),
         "regmse": lambda: PoincareRegularizedMSE(lambda_reg=lambda_reg if lambda_reg is not None else 0.2),
         "angular": lambda: AngularLoss(lambda_reg=lambda_reg if lambda_reg is not None else 0.02),
+        "infidelity": lambda: Infidelity(),
     }
     loss_type = loss_constructors[args.loss.lower()]()
 
@@ -134,8 +134,13 @@ if __name__ == '__main__':
         if not param.requires_grad:
             continue
         
-        # Exclude 1D parameters (Biases, LayerNorm) and custom flagged params (A_log, D)
-        if param.ndim <= 1 or getattr(param, "_no_weight_decay", False):
+        # param.ndim <= 1 catches ALL biases, LayerNorms, and 1D SSM params (like D)
+        # getattr catches custom PyTorch fallback flags
+        # "A_log" in name catches the 2D memory matrix in the official mamba_ssm package
+        if (param.ndim <= 1 or 
+            getattr(param, "_no_weight_decay", False) or 
+            "A_log" in name):
+            
             no_decay_params.append(param)
         else:
             decay_params.append(param)
@@ -147,9 +152,15 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.AdamW(optim_groups, lr=lr)
 
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=args.lr_factor,
+        patience=args.lr_patience, min_lr=args.min_lr,
+    )
+
     criterion = loss_type
 
     print(f"Model Parameters: {sum(p.numel() for p in model.parameters())}")
+    print(f"LR Scheduler: ReduceLROnPlateau (factor={args.lr_factor}, patience={args.lr_patience}, min_lr={args.min_lr})")
     print("Starting Training...")
 
     # Training Loop
@@ -192,18 +203,22 @@ if __name__ == '__main__':
         val_loss = np.mean(epoch_val_losses)
         val_losses.append(val_loss)
 
+        current_lr = optimizer.param_groups[0]['lr']
+
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             static_epochs = 0
             torch.save(model.state_dict(), best_model_path)
-            tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | * Best model saved")
+            tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | LR: {current_lr:.2e} | * Best model saved")
         else:
             static_epochs += 1
-            tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | No improvement for {static_epochs} epochs")
+            tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | LR: {current_lr:.2e} | No improvement for {static_epochs} epochs")
             
             if static_epochs >= patience:
                 print(f"Early stopping triggered at epoch {epoch+1}!")
                 break
+
+        scheduler.step(val_loss)
 
     run_tag = f"_{args.run_id}" if args.run_id else ""
     model_info = f"{args.dim}x{args.layers}_LR{lr}_Loss{args.loss}_dataset{args.wavelength_range}{run_tag}"

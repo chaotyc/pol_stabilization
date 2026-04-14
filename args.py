@@ -25,7 +25,7 @@ def parse_args():
         "--loss",
         type=str,
         default="MSE",
-        help="Loss function to use (MSE, RegMSE, Angular)",
+        help="Loss function to use (MSE, RegMSE, Angular, Infidelity)",
     )
     parser.add_argument(
         "--batch-size",
@@ -69,6 +69,24 @@ def parse_args():
         type=str,
         default=None,
         help="Unique run identifier for output files (used for hyperparameter tuning)",
+    )
+    parser.add_argument(
+        "--lr-factor",
+        type=float,
+        default=0.5,
+        help="Factor to reduce LR by on plateau (default: 0.5)",
+    )
+    parser.add_argument(
+        "--lr-patience",
+        type=int,
+        default=3,
+        help="Epochs with no val improvement before reducing LR (default: 3)",
+    )
+    parser.add_argument(
+        "--min-lr",
+        type=float,
+        default=1e-7,
+        help="Minimum LR floor for scheduler (default: 1e-7)",
     )
 
     return parser.parse_args()
