@@ -62,7 +62,7 @@ def parse_args():
         "--wavelength-range",
         type=str,
         default="5mm",
-        help="Wavelength difference for the dataset (e.g., '1mm', '5mm', '10mm', '14mm', '-5mm')",
+        help="Wavelength difference for the dataset (e.g., '1mm', '5mm', '10mm', '14mm', '-5mm', 'chicago_loop')",
     )
     parser.add_argument(
         "--run-id",

@@ -77,6 +77,8 @@ if __name__ == '__main__':
         path = "Datasets/03_02_2026400k_samples_txp_1551.5_pax_1565.496_polcon_and_fiber_2_1Hz.mat"
     elif delta_lambda == "-5mm":
         path = "Datasets/03_02_2026400k_samples_txp_1551.5_pax_1546.5_polcon_and_fiber_2_1Hz.mat"
+    elif delta_lambda == "chicago_loop":
+        path = "Datasets/04_10_2026txp_1551.5_pax_1565.496_fiber_loop.mat"
     else:
         print(f"Dataset does not exist for wavelength range {delta_lambda}")
         exit(1)
@@ -100,9 +102,9 @@ if __name__ == '__main__':
     targets = np.column_stack([s1_pax, s2_pax, s3_pax])
 
     # for data testing, take first 100k subset
-    MAX_SAMPLES = 100000
-    features = features[:MAX_SAMPLES]
-    targets = targets[:MAX_SAMPLES]
+    # MAX_SAMPLES = 100000
+    # features = features[:MAX_SAMPLES]
+    # targets = targets[:MAX_SAMPLES]
 
     train_end = int(0.7 * len(features))
     val_end = int(0.8 * len(features))
