@@ -1,4 +1,5 @@
 import os
+import glob
 import numpy as np
 import scipy.io
 
@@ -35,20 +36,46 @@ def analyze_degree_coverage(s1, s2, s3):
     
     return pct_ge_1, pct_ge_2
 
-# load data
-path = os.path.join('data', 'synthetic', '400k_samples_txp_1551.5_pax_1565.496_polcon_and_fiber_2_1Hz.mat')
-data = scipy.io.loadmat(path)
-data = {k: v.flatten()[:400000] for k, v in data.items() if isinstance(v, np.ndarray)}
+def process_dataset(path):
+    print(f"\nAnalyzing dataset: {path}")
+    try:
+        data = scipy.io.loadmat(path)
+        # Load all points
+        data = {k: v.flatten() for k, v in data.items() if isinstance(v, np.ndarray)}
+        
+        if 's1_pax' in data and 's2_pax' in data and 's3_pax' in data:
+            pax_1, pax_2 = analyze_degree_coverage(
+                data['s1_pax'], data['s2_pax'], data['s3_pax']
+            )
+            print(f"PAX: >=1 pt: {pax_1:.2f}%, >=2 pts: {pax_2:.2f}%")
+        else:
+            print("PAX data not found in this dataset.")
+            
+        if 's1_txp' in data and 's2_txp' in data and 's3_txp' in data:
+            txp_1, txp_2 = analyze_degree_coverage(
+                data['s1_txp'], data['s2_txp'], data['s3_txp']
+            )
+            print(f"TXP: >=1 pt: {txp_1:.2f}%, >=2 pts: {txp_2:.2f}%")
+        else:
+            print("TXP data not found in this dataset.")
+            
+    except Exception as e:
+        if "Unknown mat file type" in str(e):
+            print(f"Error: {path} appears to be a Git LFS pointer file, not the actual .mat file.")
+            print("Please run 'git lfs pull' to download the actual data files.")
+        else:
+            print(f"Error processing {path}: {e}")
 
-# analyze PAX
-pax_1, pax_2 = analyze_degree_coverage(
-    data['s1_pax'].flatten(), data['s2_pax'].flatten(), data['s3_pax'].flatten()
-)
+# Find all .mat files in data directory
+data_dir = 'data'
+mat_files = []
+for root, dirs, files in os.walk(data_dir):
+    for file in files:
+        if file.endswith('.mat'):
+            mat_files.append(os.path.join(root, file))
 
-# analyze TXP
-txp_1, txp_2 = analyze_degree_coverage(
-    data['s1_txp'].flatten(), data['s2_txp'].flatten(), data['s3_txp'].flatten()
-)
-
-print(f"PAX: >=1 pt: {pax_1:.2f}%, >=2 pts: {pax_2:.2f}%")
-print(f"TXP: >=1 pt: {txp_1:.2f}%, >=2 pts: {txp_2:.2f}%")
+if not mat_files:
+    print(f"No .mat files found in {data_dir}")
+else:
+    for file_path in sorted(mat_files):
+        process_dataset(file_path)
