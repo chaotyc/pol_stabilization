@@ -1,4 +1,7 @@
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import json
 import scipy.io
 import numpy as np
@@ -7,10 +10,10 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from args import parse_args
-from mamba import PolarizationMamba
-from loss import AngularLoss, PoincareRegularizedMSE, Infidelity
-from plotting import output_results
+from src.training.args import parse_args
+from src.model.mamba import PolarizationMamba
+from src.model.loss import AngularLoss, PoincareRegularizedMSE, Infidelity
+from src.utils.plotting import output_results
 import platform
 import random
 
@@ -67,18 +70,18 @@ if __name__ == '__main__':
     }
     loss_type = loss_constructors[args.loss.lower()]()
 
-    if delta_lambda == "1mm":
-        path = "Datasets/07_19_2025100k_samples_txp_1551.5_pax_1552.5_polcon_and_fiber_1Hz.mat"
-    elif delta_lambda == "5mm":
-        path = "Datasets/03_02_2026400k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_2_1Hz.mat"
-    elif delta_lambda == "10mm":
-        path = "Datasets/03_02_2026400k_samples_txp_1551.5_pax_1561.5_polcon_and_fiber_2_1Hz.mat"
-    elif delta_lambda == "14mm":
-        path = "Datasets/03_02_2026400k_samples_txp_1551.5_pax_1565.496_polcon_and_fiber_2_1Hz.mat"
-    elif delta_lambda == "-5mm":
-        path = "Datasets/03_02_2026400k_samples_txp_1551.5_pax_1546.5_polcon_and_fiber_2_1Hz.mat"
-    elif delta_lambda == "chicago_loop":
-        path = "Datasets/04_10_2026txp_1551.5_pax_1565.496_fiber_loop.mat"
+    if delta_lambda == "synthetic_5mm":
+        path = "data/synthetic/400k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_2_1Hz.mat"
+    elif delta_lambda == "synthetic_10mm":
+        path = "data/synthetic/400k_samples_txp_1551.5_pax_1561.5_polcon_and_fiber_2_1Hz.mat"
+    elif delta_lambda == "synthetic_14mm":
+        path = "data/synthetic/400k_samples_txp_1551.5_pax_1565.5_polcon_and_fiber_2_1Hz.mat"
+    elif delta_lambda == "synthetic_-5mm":
+        path = "data/synthetic/400k_samples_txp_1551.5_pax_1546.5_polcon_and_fiber_2_1Hz.mat"
+    elif delta_lambda == "loop_1mm":
+        path = "data/chicago_loop/txp_1551.5_pax_1552.5_fiber_loop.mat"
+    elif delta_lambda == "loop_5mm":
+        path = "data/chicago_loop/txp_1551.5_pax_1556.5_fiber_loop.mat"
     else:
         print(f"Dataset does not exist for wavelength range {delta_lambda}")
         exit(1)
@@ -102,9 +105,9 @@ if __name__ == '__main__':
     targets = np.column_stack([s1_pax, s2_pax, s3_pax])
 
     # for data testing, take first 100k subset
-    # MAX_SAMPLES = 100000
-    # features = features[:MAX_SAMPLES]
-    # targets = targets[:MAX_SAMPLES]
+    MAX_SAMPLES = 100000
+    features = features[:MAX_SAMPLES]
+    targets = targets[:MAX_SAMPLES]
 
     train_end = int(0.7 * len(features))
     val_end = int(0.8 * len(features))
@@ -168,7 +171,7 @@ if __name__ == '__main__':
     # Training Loop
     train_losses, val_losses = [], []
     best_val_loss = float('inf')
-    best_model_path = 'Results/best_model_MAMBA.pt'
+    best_model_path = 'results/best_model_MAMBA.pt'
 
     patience = 10
     static_epochs = 0
@@ -234,7 +237,7 @@ if __name__ == '__main__':
     plt.title(f'MAMBA Training Convergence\n({model_info})')
     plt.legend()
     plt.grid(True)
-    plt.savefig(f'Results/MAMBA_convergence_{model_info}.png')
+    plt.savefig(f'results/MAMBA_convergence_{model_info}.png')
 
     # Load best validation model for final evaluation
     model.load_state_dict(torch.load(best_model_path, weights_only=True))
@@ -296,7 +299,7 @@ if __name__ == '__main__':
         'best_val_loss': float(best_val_loss),
         'model_info': model_info,
     }
-    metrics_path = f'Results/MAMBA_test_results_{delta_lambda}{run_tag}.json'
+    metrics_path = f'results/MAMBA_test_results_{delta_lambda}{run_tag}.json'
     with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=2)
     print(f"Test metrics saved to {metrics_path}")

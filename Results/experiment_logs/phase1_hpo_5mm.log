@@ -1,4 +1,0 @@
-Command: /home/timch/miniconda3/envs/mamba_env/bin/python HPO.py --wavelength-range=5mm --n-trials 50 --epochs 100 --loss MSE --study-name mamba_5mm --db sqlite:///optuna_study.db
-
-[I 2026-04-21 02:40:07,834] Using an existing study with name 'mamba_5mm' instead of creating a new one.
-[I 2026-04-21 02:44:02,442] Trial 50 finished with value: 0.048864606137836754 and parameters: {'lr': 0.0005309895503691603, 'dim': 64, 'window_size': 4, 'batch_size': 128, 'weight_decay': 0.00041800282299084854}. Best is trial 23 with value: 0.002323518848965443.
