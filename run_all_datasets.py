@@ -7,12 +7,10 @@ import matplotlib.pyplot as plt
 import optuna
 
 DATASETS = {
-    "-5mm":         -5.0,
     "1mm":           1.0,
     "5mm":           5.0,
     "10mm":         10.0,
     "14mm":         14.0,
-    "chicago_loop": 14.0,
 }
 
 HPO_DB = "sqlite:///optuna_study.db"

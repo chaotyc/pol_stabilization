@@ -8,7 +8,7 @@ import sys
 window_sizes = [1, 2, 4, 16, 64, 256]
 dim = 32
 wavelength = "loop_5mm" # Target loop 5mm dataset
-epochs = 20        # Adjust if you need longer/shorter training for the experiment
+epochs = 50        # Adjust if you need longer/shorter training for the experiment
 
 results_mse = []
 results_fidelity = []

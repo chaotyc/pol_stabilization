@@ -2,3 +2,5 @@
 *.pt
 *.json
 *.log
+*.pyc
+__pycache__/

@@ -69,8 +69,9 @@ if __name__ == '__main__':
         "infidelity": lambda: Infidelity(),
     }
     loss_type = loss_constructors[args.loss.lower()]()
-
-    if delta_lambda == "synthetic_5mm":
+    if delta_lambda == "synthetic_1mm":
+        path = "data/synthetic/100k_samples_txp_1551.5_pax_1552.5_polcon_and_fiber_1Hz.mat"
+    elif delta_lambda == "synthetic_5mm":
         path = "data/synthetic/400k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_2_1Hz.mat"
     elif delta_lambda == "synthetic_10mm":
         path = "data/synthetic/400k_samples_txp_1551.5_pax_1561.5_polcon_and_fiber_2_1Hz.mat"
@@ -105,9 +106,9 @@ if __name__ == '__main__':
     targets = np.column_stack([s1_pax, s2_pax, s3_pax])
 
     # for data testing, take first 100k subset
-    MAX_SAMPLES = 100000
-    features = features[:MAX_SAMPLES]
-    targets = targets[:MAX_SAMPLES]
+    # MAX_SAMPLES = 500000
+    # features = features[:MAX_SAMPLES]
+    # targets = targets[:MAX_SAMPLES]
 
     train_end = int(0.7 * len(features))
     val_end = int(0.8 * len(features))
