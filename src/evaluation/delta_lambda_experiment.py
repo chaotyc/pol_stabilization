@@ -6,12 +6,13 @@ import sys
 
 # Experiment Configuration
 # We exclude synthetic_-5mm as requested
-datasets = ["synthetic_1mm", "synthetic_5mm", "synthetic_10mm", "synthetic_14mm"]
+datasets = ["loop_1mm", "loop_5mm", "loop_10mm", "loop_14mm"]
 delta_lambdas = [1, 5, 10, 14] # Corresponding delta lambda values in nm
 
-window_size = 256
+window_size = 128
 dim = 32
-epochs = 50
+epochs = 40
+loss = "Infidelity"
 
 results_mse = []
 results_fidelity = []
@@ -32,7 +33,9 @@ for ds, dl in zip(datasets, delta_lambdas):
         "--window-size", str(window_size),
         "--dim", str(dim),
         "--wavelength-range", ds,
-        "--epochs", str(epochs)
+        "--epochs", str(epochs),
+        "--loss", loss,
+        "--run-id", f"delta_lambda_{dl}"
     ]
     
     # Execute the training run
@@ -42,8 +45,8 @@ for ds, dl in zip(datasets, delta_lambdas):
         print(f"Error during training for dataset {ds}: {e}")
         break
 
-    # The training script outputs to results/MAMBA_test_results_{wavelength_range}.json 
-    result_file = f"results/MAMBA_test_results_{ds}.json"
+    # The training script outputs to results/MAMBA_test_results_{wavelength_range}_delta_lambda_{dl}.json 
+    result_file = f"results/MAMBA_test_results_{ds}_delta_lambda_{dl}.json"
     
     if os.path.exists(result_file):
         with open(result_file, 'r') as f:
@@ -94,9 +97,8 @@ ax1.legend(lines, labels, loc='center right')
 plt.title('Impact of Delta Lambda on MSE and Fidelity', fontsize=14)
 
 # Add a text box with experiment parameters
-param_text = f"Window Size: {window_size}\nModel Dim: {dim}\nEpochs: {epochs}"
+param_text = f"Window Size: {window_size}\nModel Dim: {dim}"
 plt.figtext(0.5, -0.05, param_text, ha="center", fontsize=10, bbox={"facecolor":"white", "alpha":0.8, "pad":5})
-
 plt.tight_layout()
 output_plot = 'results/delta_lambda_impact_results.png'
 plt.savefig(output_plot, bbox_inches="tight", dpi=300)

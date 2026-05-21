@@ -131,3 +131,79 @@ class PolarizationMamba(nn.Module):
         x = self.norm_f(x)
         out = self.head(x[:, -1, :])
         return out.view(-1, 1, 3)
+
+class PolarizationMambaSO3(nn.Module):
+    def __init__(self, input_dim: int, d_model: int, n_layers: int, system: str):
+        super().__init__()
+        self.embedding = nn.Linear(input_dim, d_model)
+        
+        self.layers = nn.ModuleList()
+        for _ in range(n_layers):
+            if system == "Linux":
+                print("Initializing Mamba Block (CUDA Optimized)")
+                from mamba_ssm import Mamba
+                self.layers.append(
+                    Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2)
+                )
+            else:
+                print("Initializing Mamba Block (PyTorch Implementation)")
+                self.layers.append(
+                    MambaBlock(d_model=d_model, d_state=16, d_conv=4, expand=2)
+                )
+
+        self.norm_f = nn.LayerNorm(d_model)
+        
+        # CHANGED: The head now predicts a 3D vector representing the generator Omega
+        self.head = nn.Linear(d_model, 3)
+
+    def get_skew_symmetric(self, omega):
+        """
+        Maps a 3D generator vector to the so(3) Lie algebra (a 3x3 skew-symmetric matrix).
+        omega: (batch, 3) -> [wx, wy, wz]
+        """
+        batch_size = omega.shape[0]
+        zero = torch.zeros(batch_size, device=omega.device)
+        wx, wy, wz = omega[:, 0], omega[:, 1], omega[:, 2]
+
+        # Skew-symmetric matrix J
+        # [  0, -wz,  wy]
+        # [ wz,   0, -wx]
+        # [-wy,  wx,   0]
+        M = torch.stack([
+            zero, -wz, wy,
+            wz, zero, -wx,
+            -wy, wx, zero
+        ], dim=1).view(batch_size, 3, 3)
+        return M
+
+    def forward(self, x):
+        # x shape: (batch, window_size, 3) representing absolute TxP control states
+
+        # 1. Input Transformation: Compute temporal differential Stokes vectors
+        # This isolates the rotational velocity and removes baseline thermal drift
+        # dx shape: (batch, window_size - 1, 3)
+        dx = x[:, 1:, :] - x[:, :-1, :]
+
+        # Forward pass through Mamba sequence using the differentials
+        embed = self.embedding(dx)
+        for layer in self.layers:
+            embed = layer(embed) + embed
+        embed = self.norm_f(embed)
+        
+        # 2. Mamba Target Formulation: Predict the 3D generator vector \Omega
+        omega = self.head(embed[:, -1, :])
+        
+        # 3. Output Transformation: Map generator to the SO(3) Lie group
+        skew_matrix = self.get_skew_symmetric(omega)
+        # torch.matrix_exp natively computes the matrix exponential and is fully differentiable
+        R_relative = torch.matrix_exp(skew_matrix) # Shape: (batch, 3, 3)
+        
+        # 4. Final Prediction Mapping: Rotate the control signal
+        # Grab the most recent absolute control signal and ensure it is mathematically normalized
+        current_txp = F.normalize(x[:, -1, :], p=2, dim=-1) # Shape: (batch, 3)
+        
+        # Apply the predicted rotation matrix to the control signal
+        # Batch matrix multiplication: (batch, 3, 3) x (batch, 3, 1)
+        predicted_pax = torch.bmm(R_relative, current_txp.unsqueeze(-1)).squeeze(-1)
+        
+        return predicted_pax.view(-1, 1, 3)

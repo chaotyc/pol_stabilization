@@ -24,7 +24,7 @@ def parse_args():
     parser.add_argument(
         "--loss",
         type=str,
-        default="MSE",
+        default="Infidelity",
         help="Loss function to use (MSE, RegMSE, Angular, Infidelity)",
     )
     parser.add_argument(
@@ -61,8 +61,8 @@ def parse_args():
     parser.add_argument(
         "--wavelength-range",
         type=str,
-        default="5mm",
-        help="Wavelength difference for the dataset (e.g. '5mm', '10mm', '14mm', '-5mm', 'chicago_loop')",
+        default="loop_5mm",
+        help="Wavelength datasets to use (synthetic_1mm, synthetic_5mm, synthetic_10mm, synthetic_14mm, loop_1mm, loop_5mm, loop_10mm, loop_14mm)",
     )
     parser.add_argument(
         "--run-id",
@@ -73,8 +73,8 @@ def parse_args():
     parser.add_argument(
         "--lr-factor",
         type=float,
-        default=0.5,
-        help="Factor to reduce LR by on plateau (default: 0.5)",
+        default=0.2,
+        help="Factor to reduce LR by on plateau (default: 0.2)",
     )
     parser.add_argument(
         "--lr-patience",

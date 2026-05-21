@@ -11,7 +11,7 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from src.training.args import parse_args
-from src.model.mamba import PolarizationMamba
+from src.model.mamba import PolarizationMamba, PolarizationMambaSO3
 from src.model.loss import AngularLoss, PoincareRegularizedMSE, Infidelity
 from src.utils.plotting import output_results
 import platform
@@ -69,21 +69,20 @@ if __name__ == '__main__':
         "infidelity": lambda: Infidelity(),
     }
     loss_type = loss_constructors[args.loss.lower()]()
-    if delta_lambda == "synthetic_1mm":
-        path = "data/synthetic/100k_samples_txp_1551.5_pax_1552.5_polcon_and_fiber_1Hz.mat"
-    elif delta_lambda == "synthetic_5mm":
-        path = "data/synthetic/400k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_2_1Hz.mat"
-    elif delta_lambda == "synthetic_10mm":
-        path = "data/synthetic/400k_samples_txp_1551.5_pax_1561.5_polcon_and_fiber_2_1Hz.mat"
-    elif delta_lambda == "synthetic_14mm":
-        path = "data/synthetic/400k_samples_txp_1551.5_pax_1565.5_polcon_and_fiber_2_1Hz.mat"
-    elif delta_lambda == "synthetic_-5mm":
-        path = "data/synthetic/400k_samples_txp_1551.5_pax_1546.5_polcon_and_fiber_2_1Hz.mat"
-    elif delta_lambda == "loop_1mm":
-        path = "data/chicago_loop/txp_1551.5_pax_1552.5_fiber_loop.mat"
-    elif delta_lambda == "loop_5mm":
-        path = "data/chicago_loop/txp_1551.5_pax_1556.5_fiber_loop.mat"
-    else:
+    dataset_paths = {
+        "synthetic_1mm": "data/synthetic/100k_samples_txp_1551.5_pax_1552.5_polcon_and_fiber_1Hz.mat",
+        "synthetic_5mm": "data/synthetic/400k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_2_1Hz.mat",
+        "synthetic_10mm": "data/synthetic/400k_samples_txp_1551.5_pax_1561.5_polcon_and_fiber_2_1Hz.mat",
+        "synthetic_14mm": "data/synthetic/400k_samples_txp_1551.5_pax_1565.5_polcon_and_fiber_2_1Hz.mat",
+        "synthetic_-5mm": "data/synthetic/400k_samples_txp_1551.5_pax_1546.5_polcon_and_fiber_2_1Hz.mat",
+        "loop_1mm": "data/chicago_loop/txp_1551.5_pax_1552.5_fiber_loop.mat",
+        "loop_5mm": "data/chicago_loop/txp_1551.5_pax_1556.5_fiber_loop.mat",
+        "loop_10mm": "data/chicago_loop/txp_1551.5_pax_1561.5_fiber_loop.mat",
+        "loop_14mm": "data/chicago_loop/txp_1551.5_pax_1565.5_fiber_loop.mat",
+    }
+    
+    path = dataset_paths.get(delta_lambda)
+    if path is None:
         print(f"Dataset does not exist for wavelength range {delta_lambda}")
         exit(1)
         
@@ -105,10 +104,10 @@ if __name__ == '__main__':
     features = np.column_stack([s1_txp, s2_txp, s3_txp])
     targets = np.column_stack([s1_pax, s2_pax, s3_pax])
 
-    # for data testing, take first 100k subset
-    # MAX_SAMPLES = 500000
-    # features = features[:MAX_SAMPLES]
-    # targets = targets[:MAX_SAMPLES]
+    # for data testing, take first 2000000 subset
+    MAX_SAMPLES = 2000000
+    features = features[:MAX_SAMPLES]
+    targets = targets[:MAX_SAMPLES]
 
     train_end = int(0.7 * len(features))
     val_end = int(0.8 * len(features))
@@ -130,7 +129,7 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, pin_memory=True)
 
     # Initialize Model
-    model = PolarizationMamba(input_dim=3, d_model=args.dim, n_layers=args.layers, system=system_os).to(device)
+    model = PolarizationMambaSO3(input_dim=3, d_model=args.dim, n_layers=args.layers, system=system_os).to(device)
 
     # Select which parameters to decay (only the weight matrices)
     decay_params = []
@@ -292,9 +291,6 @@ if __name__ == '__main__':
         'test_mse': test_mse,
         'test_rmse': test_rmse,
         'test_mae': test_mae,
-        # 'norm_test_mse': norm_mse,
-        # 'norm_test_rmse': norm_rmse,
-        # 'norm_test_mae': norm_mae,
         'mean_deviation': mean_deviation,
         'mean_fidelity': mean_fidelity,
         'best_val_loss': float(best_val_loss),
