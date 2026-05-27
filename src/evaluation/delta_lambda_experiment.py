@@ -11,7 +11,7 @@ delta_lambdas = [1, 5, 10, 14] # Corresponding delta lambda values in nm
 
 window_size = 128
 dim = 32
-epochs = 40
+epochs = 50
 loss = "Infidelity"
 
 results_mse = []

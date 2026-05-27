@@ -47,17 +47,6 @@ def output_results(preds, actuals, split_idx, window_size, model_info, n_plot=50
     predicted_norms = np.linalg.norm(preds_slice, axis=1)
     deviation_from_unity = np.abs(predicted_norms - 1)
 
-    plt.figure(figsize=(12, 6))
-    plt.plot(time_indices, predicted_norms, label='Predicted L2 Norm', color='green', linewidth=1.5)
-    plt.axhline(y=1.0, color='black', linestyle='--', linewidth=2, label='Unit Sphere (Ideal = 1.0)')
-    plt.title(f'Physical Consistency Check ({model_info})')
-    plt.xlabel('Time Index')
-    plt.ylabel('Vector Magnitude')
-    plt.legend()
-    plt.grid(True, alpha=0.5)
-    plt.tight_layout()
-    plt.savefig(f'results/MAMBA_s_parameter_norms.png')
-
     mean_dev = np.mean(deviation_from_unity)
     max_dev = np.max(deviation_from_unity)
 

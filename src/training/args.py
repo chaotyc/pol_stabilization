@@ -79,8 +79,8 @@ def parse_args():
     parser.add_argument(
         "--lr-patience",
         type=int,
-        default=3,
-        help="Epochs with no val improvement before reducing LR (default: 3)",
+        default=5,
+        help="Epochs with no val improvement before reducing LR (default: 5)",
     )
     parser.add_argument(
         "--min-lr",

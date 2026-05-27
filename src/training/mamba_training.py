@@ -105,9 +105,9 @@ if __name__ == '__main__':
     targets = np.column_stack([s1_pax, s2_pax, s3_pax])
 
     # for data testing, take first 2000000 subset
-    MAX_SAMPLES = 2000000
-    features = features[:MAX_SAMPLES]
-    targets = targets[:MAX_SAMPLES]
+    # MAX_SAMPLES = 300000
+    # features = features[:MAX_SAMPLES]
+    # targets = targets[:MAX_SAMPLES]
 
     train_end = int(0.7 * len(features))
     val_end = int(0.8 * len(features))
@@ -173,7 +173,7 @@ if __name__ == '__main__':
     best_val_loss = float('inf')
     best_model_path = 'results/best_model_MAMBA.pt'
 
-    patience = 10
+    patience = 50
     static_epochs = 0
     for epoch in range(epochs):
         model.train()
