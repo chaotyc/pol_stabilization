@@ -6,26 +6,27 @@ def output_results(preds, actuals, split_idx, window_size, model_info, n_plot=50
     actuals_slice = actuals[:n_plot, 0, :]
     errors_slice = np.abs(preds_slice - actuals_slice)
 
-    start_time_index = split_idx 
-    time_indices = range(start_time_index + window_size, start_time_index + window_size + n_plot)
+    # Time axis: start at 0, each index = 100 ms
+    n = actuals_slice.shape[0]
+    time = np.arange(n) * 0.1  # seconds
 
     plt.figure(figsize=(15, 10))
     params = ['S1', 'S2', 'S3']
 
     for i in range(3):
         plt.subplot(3, 2, (i*2)+1)
-        plt.plot(time_indices, actuals_slice[:, i], label='Actual', color='blue', linewidth=1.5)
-        plt.plot(time_indices, preds_slice[:, i], label='Predicted', color='red', linestyle='--', linewidth=1.5)
+        plt.plot(time, actuals_slice[:, i], label='Actual', color='blue', linewidth=1.5)
+        plt.plot(time, preds_slice[:, i], label='Predicted', color='red', linestyle='--', linewidth=1.5)
         plt.title(f'{params[i]} Parameter Time Series ({model_info})')
-        plt.xlabel('Time Index')
+        plt.xlabel('Time (s)')
         plt.ylabel('Value')
         plt.legend()
         plt.grid(True, alpha=0.5)
 
         plt.subplot(3, 2, (i*2)+2)
-        plt.plot(time_indices, errors_slice[:, i], label='Abs Error', color='purple', alpha=0.8)
+        plt.plot(time, errors_slice[:, i], label='Abs Error', color='purple', alpha=0.8)
         plt.title(f'{params[i]} Absolute Error')
-        plt.xlabel('Time Index')
+        plt.xlabel('Time (s)')
         plt.grid(True, alpha=0.5)
 
     plt.tight_layout()

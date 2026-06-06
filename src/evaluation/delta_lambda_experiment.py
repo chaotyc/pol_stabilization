@@ -6,7 +6,7 @@ import sys
 
 # Experiment Configuration
 # We exclude synthetic_-5mm as requested
-datasets = ["loop_1mm", "loop_5mm", "loop_10mm", "loop_14mm"]
+datasets = ["loop_1mm","loop_5mm", "loop_10mm", "loop_14mm"]
 delta_lambdas = [1, 5, 10, 14] # Corresponding delta lambda values in nm
 
 window_size = 128
@@ -14,7 +14,7 @@ dim = 32
 epochs = 60
 loss = "Infidelity"
 
-results_mse = []
+results_rmse = []
 results_fidelity = []
 
 # Ensure results directory exists
@@ -51,14 +51,14 @@ for ds, dl in zip(datasets, delta_lambdas):
     if os.path.exists(result_file):
         with open(result_file, 'r') as f:
             data = json.load(f)
-            # Extract MSE and Fidelity
-            mse = data.get("test_mse", None)
+            # Extract RMSE and Fidelity
+            rmse = data.get("test_rmse", None)
             fidelity = data.get("mean_fidelity", None)
             
-            results_mse.append(mse)
+            results_rmse.append(rmse)
             results_fidelity.append(fidelity)
             
-            print(f"Completed {ds} -> MSE: {mse:.4f}, Fidelity: {fidelity:.4f}")
+            print(f"Completed {ds} -> RMSE: {rmse:.4f}, Fidelity: {fidelity:.4f}")
             
         # Rename the result file to avoid overwriting it in the next loop iteration
         archive_name = f"results/MAMBA_test_results_{ds}_dim{dim}_w{window_size}.json"
@@ -67,17 +67,17 @@ for ds, dl in zip(datasets, delta_lambdas):
         os.rename(result_file, archive_name)
     else:
         print(f"Warning: Expected results file {result_file} not found!")
-        results_mse.append(None)
+        results_rmse.append(None)
         results_fidelity.append(None)
 
 # Plot Results
 fig, ax1 = plt.subplots(figsize=(10, 6))
 
-# Plot 1: Mean Squared Error vs Delta Lambda (Left Y-axis)
+# Plot 1: Root Mean Squared Error vs Delta Lambda (Left Y-axis)
 color1 = 'tab:red'
 ax1.set_xlabel('Delta Lambda (nm)', fontsize=12)
-ax1.set_ylabel('Test MSE', fontsize=12, color=color1)
-line1 = ax1.plot(delta_lambdas, results_mse, marker='o', color=color1, linestyle='-', linewidth=2, markersize=8, label='Test MSE')
+ax1.set_ylabel('RMSE', fontsize=12, color=color1)
+line1 = ax1.plot(delta_lambdas, results_rmse, marker='o', color=color1, linestyle='-', linewidth=2, markersize=8, label='Test RMSE')
 ax1.tick_params(axis='y', labelcolor=color1)
 ax1.set_xticks(delta_lambdas)
 ax1.grid(True, alpha=0.5, linestyle='--')
@@ -85,7 +85,7 @@ ax1.grid(True, alpha=0.5, linestyle='--')
 # Plot 2: Fidelity (Accuracy) vs Delta Lambda (Right Y-axis)
 ax2 = ax1.twinx()
 color2 = 'tab:blue'
-ax2.set_ylabel('Mean Fidelity', fontsize=12, color=color2)
+ax2.set_ylabel('Fidelity', fontsize=12, color=color2)
 line2 = ax2.plot(delta_lambdas, results_fidelity, marker='s', color=color2, linestyle='-', linewidth=2, markersize=8, label='Mean Fidelity')
 ax2.tick_params(axis='y', labelcolor=color2)
 
@@ -94,7 +94,7 @@ lines = line1 + line2
 labels = [l.get_label() for l in lines]
 ax1.legend(lines, labels, loc='center right')
 
-plt.title('Impact of Delta Lambda on MSE and Fidelity', fontsize=14)
+plt.title('Impact of Delta Lambda on Error', fontsize=14)
 
 # Add a text box with experiment parameters
 param_text = f"Window Size: {window_size}\nModel Dim: {dim}"
