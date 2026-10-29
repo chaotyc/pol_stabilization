@@ -1,14 +1,18 @@
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
-def output_results(preds, actuals, split_idx, window_size, model_info, n_plot=500):
+def output_results(preds, actuals, split_idx, window_size, model_info, n_plot=500, output_dir="results", sample_interval=None):
     preds_slice = preds[:n_plot, 0, :]
     actuals_slice = actuals[:n_plot, 0, :]
     errors_slice = np.abs(preds_slice - actuals_slice)
 
-    # Time axis: start at 0, each index = 100 ms
     n = actuals_slice.shape[0]
-    time = np.arange(n) * 0.1  # seconds
+    time = np.arange(n)
+    xlabel = "Sample"
+    if sample_interval is not None:
+        time = time * sample_interval
+        xlabel = "Time (s)"
 
     plt.figure(figsize=(15, 10))
     params = ['S1', 'S2', 'S3']
@@ -18,7 +22,7 @@ def output_results(preds, actuals, split_idx, window_size, model_info, n_plot=50
         plt.plot(time, actuals_slice[:, i], label='Actual', color='blue', linewidth=1.5)
         plt.plot(time, preds_slice[:, i], label='Predicted', color='red', linestyle='--', linewidth=1.5)
         plt.title(f'{params[i]} Parameter Time Series ({model_info})')
-        plt.xlabel('Time (s)')
+        plt.xlabel(xlabel)
         plt.ylabel('Value')
         plt.legend()
         plt.grid(True, alpha=0.5)
@@ -26,11 +30,12 @@ def output_results(preds, actuals, split_idx, window_size, model_info, n_plot=50
         plt.subplot(3, 2, (i*2)+2)
         plt.plot(time, errors_slice[:, i], label='Abs Error', color='purple', alpha=0.8)
         plt.title(f'{params[i]} Absolute Error')
-        plt.xlabel('Time (s)')
+        plt.xlabel(xlabel)
         plt.grid(True, alpha=0.5)
 
     plt.tight_layout()
-    plt.savefig(f'results/MAMBA_predictions_{model_info}.png')
+    plt.savefig(Path(output_dir) / "predictions.png")
+    plt.close()
 
     print("\n Statistics:")
     avg_mae = 0

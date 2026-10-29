@@ -1,55 +1,20 @@
-import subprocess
-import time
-import sys
+import argparse
 
-# List of all dataset wavelength ranges defined in your mamba_training.py
-DATASETS = [
-    "loop_1mm",
-    "loop_5mm",
-    "loop_10mm",
-    "loop_14mm",
-]
+from src.evaluation.runner import run_training
+from src.utils.data import DATASET_PATHS
+from src.utils.runs import new_run_id
 
 
-extra_args = ["--epochs", "50"]
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Train isolated SO3 runs for each dataset")
+    parser.add_argument("--datasets", nargs="+", choices=DATASET_PATHS, default=["loop_1mm", "loop_5mm", "loop_10mm", "loop_14mm"])
+    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--output-dir", default="results")
+    parser.add_argument("--backend", choices=["auto", "pytorch", "cuda"], default="auto")
+    args = parser.parse_args(argv)
+    return [run_training(ds, new_run_id("batch_sweep"), args.output_dir, epochs=args.epochs, backend=args.backend)
+            for ds in args.datasets]
 
-
-def main():
-    print(f"Starting automated Mamba training sweep across {len(DATASETS)} datasets...")
-    print("Results will be saved to the results/ directory.\n")
-
-    for dataset in DATASETS:
-        print(f"Starting Training for Dataset: {dataset}")
-        
-        # Create a unique run_id using a timestamp to keep results organized
-        run_id = f"batch_sweep_{int(time.time())}"
-        
-        # Construct the command list
-        command = [
-            sys.executable, # Uses the exact same python interpreter running this script
-            "src/training/mamba_training.py", 
-            "--wavelength-range", dataset,
-            "--run-id", run_id
-        ] + extra_args
-        
-        try:
-            # Run the command and wait for it to finish
-            subprocess.run(command, check=True)
-            print(f"\nFinished training on {dataset}.\n")
-            
-        except subprocess.CalledProcessError as e:
-            # If the training script crashes, this catches the error
-            print(f"\nError occurred while training on {dataset}.")
-            print(f"Command failed with exit status {e.returncode}.")
-            print("Halting the remaining batch runs.")
-            break
-            
-        except KeyboardInterrupt:
-            # Allows you to Ctrl+C out of the entire sweep cleanly
-            print("\nSweep manually interrupted by user. Exiting.")
-            break
-
-    print("Sweep process finished!")
 
 if __name__ == "__main__":
     main()

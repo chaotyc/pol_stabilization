@@ -1,89 +1,77 @@
-import os
+"""Measure per-window prediction latency on available devices."""
+import argparse
+from pathlib import Path
 import time
 
-import scipy.io as sio
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
-import tqdm
+from tqdm import tqdm
 
-from src.inference.inference import PolarizationPredictor
+from src.inference.inference import MODEL_TYPES, PolarizationPredictor
+from src.utils.data import load_stokes
 
-def run_benchmark(predictor, features, W):
-    i = 0
-    n_windows = len(features) - W
+
+def run_benchmark(predictor, features, window_size, max_windows=1000, *, start_index=0, sample_interval=None):
+    n_windows = min(max_windows, len(features) - window_size)
+    if n_windows < 1:
+        raise ValueError("Benchmark data must contain more samples than the window size")
+    needs_time = getattr(predictor.model, "requires_time", False)
+    seconds = predictor.config.get("time_units") == "seconds"
+    if needs_time and seconds and (sample_interval is None or not np.isfinite(sample_interval) or sample_interval <= 0):
+        raise ValueError("This model uses seconds; supply --sample-interval from its training run")
+
+    def predict_at(index):
+        kwargs = {}
+        if needs_time:
+            kwargs["target_time"] = (start_index + index + window_size) * (sample_interval if seconds else 1.0)
+        return predictor.predict(features[index:index + window_size], **kwargs)
+
+    for _ in range(5):
+        predict_at(0)
     times = []
-    cuda = predictor.device == 'cuda'
-    for _ in tqdm.tqdm(range(n_windows), desc="Inferencing"):
-        window = features[i:i+W]
-        if cuda: torch.cuda.synchronize()
-        t0 = time.perf_counter()
-        pred = predictor.predict(window)
-        if cuda: torch.cuda.synchronize()
-        t1 = time.perf_counter()
-        times.append(t1 - t0)
-        i += 1
-
-    inference_time_mean = np.mean(times)
-    inference_time_std = np.std(times)
-    inference_time_median = np.median(times)
-
-    print(f"Inference time mean: {inference_time_mean:.6f} s")
-    print(f"Inference time std: {inference_time_std:.6f} s")
-    print(f"Inference time median: {inference_time_median:.6f} s")
-
+    for i in tqdm(range(n_windows), desc=str(predictor.device)):
+        if predictor.device.type == "cuda":
+            torch.cuda.synchronize(predictor.device)
+        start = time.perf_counter()
+        predict_at(i)
+        if predictor.device.type == "cuda":
+            torch.cuda.synchronize(predictor.device)
+        times.append(time.perf_counter() - start)
+    print(f"{predictor.device}: median={np.median(times):.6f}s, mean={np.mean(times):.6f}s, std={np.std(times):.6f}s")
     return times
 
 
-def main():
-    model_path = "results/best_model_MAMBA.pt"
-    predictor_gpu = PolarizationPredictor(model_path, device="cuda")
-    predictor_cpu = PolarizationPredictor(model_path, device="cpu")
-    W = predictor_gpu.window_size
-
-
-    data_path = "data/chicago_loop/txp_1551.5_pax_1556.5_fiber_loop.mat"
-
-    if data_path is None:
-            print(f"Dataset does not exist for specific data path")
-            exit(1)
-            
-    if not os.path.exists(data_path):
-        print(f"File not found at {data_path}, exiting...")
-        exit(1)
-    else:
-        print(f"Loading data from {data_path}")
-        mat_data = sio.loadmat(data_path)
-
-
-    s1_txp = mat_data['s1_txp'].flatten()
-    s2_txp = mat_data['s2_txp'].flatten()
-    s3_txp = mat_data['s3_txp'].flatten()
-
-    features = np.column_stack([s1_txp, s2_txp, s3_txp])
-
-    times_gpu = run_benchmark(predictor_gpu, features, W)
-    times_cpu = run_benchmark(predictor_cpu, features, W)
-
-    _, (ax1, ax2) = plt.subplots(1,2, figsize=(10,5))
-    ax1.plot(times_gpu[1:], 'r.', alpha=0.5, label="GPU")
-    ax1.plot(times_cpu[1:], 'b.', alpha=0.5, label="CPU")
-    ax1.axhline(np.median(times_gpu[1:]), color='r', linestyle='--', label=f"Median: {np.median(times_gpu[1:]):.6f} s")
-    ax1.axhline(np.median(times_cpu[1:]), color='b', linestyle='--', label=f"Median: {np.median(times_cpu[1:]):.6f} s")
-    ax1.set_title("Inference Time")
-    ax1.set_xlabel("Inference Number")
-    ax1.set_ylabel("Time (s)")
-    ax1.grid(True)
-    ax1.legend()
-    ax2.hist(times_gpu[1:], bins=100, alpha=0.5, label="GPU")
-    ax2.hist(times_cpu[1:], bins=100, alpha=0.5, label="CPU")
-    ax2.set_title("Inference Time Distribution")
-    ax2.set_xlabel("Time (s)")
-    ax2.set_ylabel("Frequency")
-    ax2.grid(True)
-    ax2.legend()
-    plt.show()
-    plt.savefig("inference_time.png")
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("model_path")
+    parser.add_argument("data_path")
+    parser.add_argument("--window-size", type=int, help="Original window size, required for legacy checkpoints")
+    parser.add_argument("--model-type", choices=MODEL_TYPES, help="Original architecture for legacy checkpoints")
+    parser.add_argument("--max-windows", type=int, default=1000)
+    parser.add_argument("--start-index", type=int, default=0, help="Global sample index of the first row in data_path")
+    parser.add_argument("--sample-interval", type=float, help="Seconds per sample for time models trained in seconds")
+    parser.add_argument("--output", default="results/inference_time.png")
+    args = parser.parse_args(argv)
+    legacy = {"window_size": args.window_size, "model_type": args.model_type} if args.window_size and args.model_type else None
+    features, _ = load_stokes(args.data_path)
+    devices = ["cpu"] + (["cuda"] if torch.cuda.is_available() else [])
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    for device in devices:
+        predictor = PolarizationPredictor(args.model_path, device=device, legacy_config=legacy)
+        times = run_benchmark(predictor, features, predictor.window_size, args.max_windows,
+                              start_index=args.start_index, sample_interval=args.sample_interval)
+        axes[0].plot(times, ".", alpha=0.5, label=device)
+        axes[1].hist(times, bins=50, alpha=0.5, label=device)
+    axes[0].set(xlabel="Prediction", ylabel="Latency (s)")
+    axes[1].set(xlabel="Latency (s)", ylabel="Count")
+    for ax in axes:
+        ax.legend()
+    fig.tight_layout()
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output)
+    plt.close(fig)
 
 
 if __name__ == "__main__":

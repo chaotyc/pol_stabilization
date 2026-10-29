@@ -1,105 +1,38 @@
-import os
-import subprocess
-import json
+import argparse
+from pathlib import Path
+
 import matplotlib.pyplot as plt
-import sys
 
-# Experiment Configuration
-# We exclude synthetic_-5mm as requested
-datasets = ["loop_1mm","loop_5mm", "loop_10mm", "loop_14mm"]
-delta_lambdas = [1, 5, 10, 14] # Corresponding delta lambda values in nm
+from src.evaluation.runner import run_training
+from src.utils.data import WAVELENGTHS
+from src.utils.runs import new_run_id
 
-window_size = 128
-dim = 32
-epochs = 60
-loss = "Infidelity"
 
-results_rmse = []
-results_fidelity = []
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Compare wavelength separations using the SO3 model")
+    parser.add_argument("--datasets", nargs="+", choices=WAVELENGTHS, default=["loop_1mm", "loop_5mm", "loop_10mm", "loop_14mm"])
+    parser.add_argument("--epochs", type=int, default=60)
+    parser.add_argument("--window-size", type=int, default=128)
+    parser.add_argument("--dim", type=int, default=32)
+    parser.add_argument("--output-dir", default="results")
+    parser.add_argument("--backend", default="auto", choices=["auto", "pytorch", "cuda"])
+    args = parser.parse_args(argv)
+    results = [run_training(ds, new_run_id("wavelength"), args.output_dir, window_size=args.window_size,
+                            dim=args.dim, epochs=args.epochs, backend=args.backend) for ds in args.datasets]
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for regime in ("synthetic", "loop"):
+        selected = sorted([r for r in results if r["wavelength_range"].startswith(regime)],
+                          key=lambda r: WAVELENGTHS[r["wavelength_range"]])
+        if selected:
+            ax.plot([WAVELENGTHS[r["wavelength_range"]] for r in selected], [r["test_rmse"] for r in selected], "o-", label=regime)
+    ax.set(xlabel="Wavelength separation (nm)", ylabel="Test RMSE", title="SO3 error vs wavelength separation")
+    ax.legend()
+    ax.grid(True, alpha=0.4)
+    fig.tight_layout()
+    fig.savefig(Path(args.output_dir) / f"{new_run_id('delta_lambda_impact')}.png")
+    plt.close(fig)
+    return results
 
-# Ensure results directory exists
-os.makedirs("results", exist_ok=True)
 
-print(f"Testing Delta Lambdas: {delta_lambdas}nm with Model Dim: {dim}")
-
-for ds, dl in zip(datasets, delta_lambdas):
-    print(f"\n{'='*50}")
-    print(f"Running training for Dataset: {ds} (Delta Lambda: {dl}nm)")
-    print(f"{'='*50}")
-    
-    # Construct the command to run your training script
-    cmd = [
-        sys.executable, "src/training/mamba_training.py",
-        "--window-size", str(window_size),
-        "--dim", str(dim),
-        "--wavelength-range", ds,
-        "--epochs", str(epochs),
-        "--loss", loss,
-        "--run-id", f"delta_lambda_{dl}"
-    ]
-    
-    # Execute the training run
-    try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Error during training for dataset {ds}: {e}")
-        break
-
-    # The training script outputs to results/MAMBA_test_results_{wavelength_range}_delta_lambda_{dl}.json 
-    result_file = f"results/MAMBA_test_results_{ds}_delta_lambda_{dl}.json"
-    
-    if os.path.exists(result_file):
-        with open(result_file, 'r') as f:
-            data = json.load(f)
-            # Extract RMSE and Fidelity
-            rmse = data.get("test_rmse", None)
-            fidelity = data.get("mean_fidelity", None)
-            
-            results_rmse.append(rmse)
-            results_fidelity.append(fidelity)
-            
-            print(f"Completed {ds} -> RMSE: {rmse:.4f}, Fidelity: {fidelity:.4f}")
-            
-        # Rename the result file to avoid overwriting it in the next loop iteration
-        archive_name = f"results/MAMBA_test_results_{ds}_dim{dim}_w{window_size}.json"
-        if os.path.exists(archive_name):
-            os.remove(archive_name)
-        os.rename(result_file, archive_name)
-    else:
-        print(f"Warning: Expected results file {result_file} not found!")
-        results_rmse.append(None)
-        results_fidelity.append(None)
-
-# Plot Results
-fig, ax1 = plt.subplots(figsize=(10, 6))
-
-# Plot 1: Root Mean Squared Error vs Delta Lambda (Left Y-axis)
-color1 = 'tab:red'
-ax1.set_xlabel('Delta Lambda (nm)', fontsize=12)
-ax1.set_ylabel('RMSE', fontsize=12, color=color1)
-line1 = ax1.plot(delta_lambdas, results_rmse, marker='o', color=color1, linestyle='-', linewidth=2, markersize=8, label='Test RMSE')
-ax1.tick_params(axis='y', labelcolor=color1)
-ax1.set_xticks(delta_lambdas)
-ax1.grid(True, alpha=0.5, linestyle='--')
-
-# Plot 2: Fidelity (Accuracy) vs Delta Lambda (Right Y-axis)
-ax2 = ax1.twinx()
-color2 = 'tab:blue'
-ax2.set_ylabel('Fidelity', fontsize=12, color=color2)
-line2 = ax2.plot(delta_lambdas, results_fidelity, marker='s', color=color2, linestyle='-', linewidth=2, markersize=8, label='Mean Fidelity')
-ax2.tick_params(axis='y', labelcolor=color2)
-
-# Combine legends
-lines = line1 + line2
-labels = [l.get_label() for l in lines]
-ax1.legend(lines, labels, loc='center right')
-
-plt.title('Impact of Delta Lambda on Error', fontsize=14)
-
-# Add a text box with experiment parameters
-param_text = f"Window Size: {window_size}\nModel Dim: {dim}"
-plt.figtext(0.5, -0.05, param_text, ha="center", fontsize=10, bbox={"facecolor":"white", "alpha":0.8, "pad":5})
-plt.tight_layout()
-output_plot = 'results/delta_lambda_impact_results.png'
-plt.savefig(output_plot, bbox_inches="tight", dpi=300)
-print(f"Experiment complete! Graph saved to {output_plot}")
+if __name__ == "__main__":
+    main()

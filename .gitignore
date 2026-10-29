@@ -1,7 +1,8 @@
+__pycache__/
+*.py[cod]
+.venv/
+results/runs/
+results/hpo/
 *.png
 *.pt
-*.json
-*.log
-*.pyc
-__pycache__/
-.venv
+optuna_study.db*

@@ -1,8 +1,16 @@
 import argparse
 
-def parse_args():
+from src.model.mamba import SO3_MODEL_TYPES
+
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Mamba Training Script Arguments")
 
+    parser.add_argument(
+        "--model-type",
+        choices=SO3_MODEL_TYPES,
+        default="PolarizationMambaSO3",
+        help="SO3 input model: differences, coordinates plus differences, or CombinedTime with a timestamp",
+    )
     parser.add_argument(
         "--window-size",
         type=int,
@@ -23,8 +31,9 @@ def parse_args():
     )
     parser.add_argument(
         "--loss",
-        type=str,
-        default="Infidelity",
+        type=str.lower,
+        choices=["mse", "regmse", "angular", "infidelity"],
+        default="infidelity",
         help="Loss function to use (MSE, RegMSE, Angular, Infidelity)",
     )
     parser.add_argument(
@@ -89,4 +98,20 @@ def parse_args():
         help="Minimum LR floor for scheduler (default: 1e-7)",
     )
 
-    return parser.parse_args()
+    parser.add_argument("--output-dir", default="results", help="Root directory for isolated run artifacts")
+    parser.add_argument("--data-path", default=None, help="Override the selected dataset path")
+    parser.add_argument("--max-samples", type=int, default=300000)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
+    parser.add_argument("--backend", choices=["auto", "pytorch", "cuda"], default="auto")
+    parser.add_argument("--validation-only", action="store_true", help="Skip test evaluation during HPO")
+    parser.add_argument("--sample-interval", type=float, default=None, help="Seconds per sample; plots use sample indices if omitted")
+    args = parser.parse_args(argv)
+    if args.window_size < 2:
+        parser.error("--window-size must be at least 2 for the SO3 model")
+    for name in ("epochs", "batch_size", "dim", "layers", "max_samples", "lr"):
+        if getattr(args, name) <= 0:
+            parser.error(f"--{name.replace('_', '-')} must be positive")
+    if args.sample_interval is not None and args.sample_interval <= 0:
+        parser.error("--sample-interval must be positive")
+    return args

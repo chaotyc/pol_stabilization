@@ -3,322 +3,167 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import json
-import scipy.io
-import numpy as np
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-from src.training.args import parse_args
-from src.model.mamba import PolarizationMamba, PolarizationMambaSO3
-from src.model.loss import AngularLoss, PoincareRegularizedMSE, Infidelity
-from src.utils.plotting import output_results
-import platform
 import random
 
-# Check system OS for appropriate Mamba implementation
-system_os = platform.system()
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from torch import nn
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("PyTorch version:", torch.__version__)
-print("Current device:", device)
-torch.backends.cudnn.benchmark = True # Optimizes performance for fixed input sizes
+from src.training.args import parse_args
+from src.training.data import SParameterDataset, batch_inputs
+from src.model.mamba import SO3_MODEL_TYPES
+from src.model.loss import AngularLoss, PoincareRegularizedMSE, Infidelity
+from src.utils.data import DATASET_PATHS, REPO_ROOT, load_stokes
+from src.utils.metrics import prediction_metrics
+from src.utils.plotting import output_results
+from src.utils.runs import create_run_directory
 
-def set_seed(seed: int = 42):
+
+def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed) 
-    # Optional: forces deterministic algorithms (can slow down training slightly)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False 
+    torch.backends.cudnn.benchmark = False
 
-class SParameterDataset(Dataset):
-    def __init__(self, features, targets, window_size):
-        self.features = torch.FloatTensor(features)
-        self.targets = torch.FloatTensor(targets)
-        self.window_size = window_size
 
-    def __len__(self):
-        return len(self.features) - self.window_size
-
-    def __getitem__(self, idx):
-        x = self.features[idx : idx + self.window_size]
-        y = self.targets[idx + self.window_size].unsqueeze(0)
-        return x, y
-
-if __name__ == '__main__':
-    # Set seed for reproducibility
-    set_seed(42)
-    
-    # Parse Arguments
-    args = parse_args()
-    window_size = args.window_size
-    epochs = args.epochs
-    batch_size = args.batch_size
-    lr = args.lr
-    delta_lambda = args.wavelength_range
-
-    lambda_reg = args.lambda_reg
-    loss_constructors = {
-        "mse": lambda: nn.MSELoss(),
-        "regmse": lambda: PoincareRegularizedMSE(lambda_reg=lambda_reg if lambda_reg is not None else 0.2),
-        "angular": lambda: AngularLoss(lambda_reg=lambda_reg if lambda_reg is not None else 0.02),
-        "infidelity": lambda: Infidelity(),
-    }
-    loss_type = loss_constructors[args.loss.lower()]()
-    dataset_paths = {
-        "synthetic_1mm": "data/synthetic/100k_samples_txp_1551.5_pax_1552.5_polcon_and_fiber_1Hz.mat",
-        "synthetic_5mm": "data/synthetic/400k_samples_txp_1551.5_pax_1556.5_polcon_and_fiber_2_1Hz.mat",
-        "synthetic_10mm": "data/synthetic/400k_samples_txp_1551.5_pax_1561.5_polcon_and_fiber_2_1Hz.mat",
-        "synthetic_14mm": "data/synthetic/400k_samples_txp_1551.5_pax_1565.5_polcon_and_fiber_2_1Hz.mat",
-        "synthetic_-5mm": "data/synthetic/400k_samples_txp_1551.5_pax_1546.5_polcon_and_fiber_2_1Hz.mat",
-        "loop_1mm": "data/chicago_loop/txp_1551.5_pax_1552.5_fiber_loop.mat",
-        "loop_5mm": "data/chicago_loop/txp_1551.5_pax_1556.5_fiber_loop.mat",
-        "loop_10mm": "data/chicago_loop/txp_1551.5_pax_1561.5_fiber_loop.mat",
-        "loop_14mm": "data/chicago_loop/txp_1551.5_pax_1565.5_fiber_loop.mat",
-    }
-    
-    path = dataset_paths.get(delta_lambda)
-    if path is None:
-        print(f"Dataset does not exist for wavelength range {delta_lambda}")
-        exit(1)
-        
-    if not os.path.exists(path):
-        print(f"File not found at {path}")
-        exit(1)
-    else:
-        print(f"Loading data from {path}")
-        mat_data = scipy.io.loadmat(path)
-
-    # Extract Data
-    s1_pax = mat_data['s1_pax'].flatten()
-    s2_pax = mat_data['s2_pax'].flatten()
-    s3_pax = mat_data['s3_pax'].flatten()
-    s1_txp = mat_data['s1_txp'].flatten()
-    s2_txp = mat_data['s2_txp'].flatten()
-    s3_txp = mat_data['s3_txp'].flatten()
-
-    features = np.column_stack([s1_txp, s2_txp, s3_txp])
-    targets = np.column_stack([s1_pax, s2_pax, s3_pax])
-
-    # for data testing, take first 2000000 subset
-    MAX_SAMPLES = 300000
-    features = features[:MAX_SAMPLES]
-    targets = targets[:MAX_SAMPLES]
-
-    train_end = int(0.7 * len(features))
-    val_end = int(0.8 * len(features))
-
-    train_features = features[:train_end]
-    train_targets = targets[:train_end]
-    val_features = features[train_end:val_end]
-    val_targets = targets[train_end:val_end]
-    test_features = features[val_end:]
-    test_targets = targets[val_end:]
-
-    # Prepare Data
-    train_set = SParameterDataset(train_features, train_targets, window_size)
-    val_set = SParameterDataset(val_features, val_targets, window_size)
-    test_set = SParameterDataset(test_features, test_targets, window_size)
-
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, pin_memory=True)
-    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, pin_memory=True)
-
-    # Initialize Model
-    model = PolarizationMambaSO3(input_dim=3, d_model=args.dim, n_layers=args.layers, system=system_os).to(device)
-
-    # Select which parameters to decay (only the weight matrices)
-    decay_params = []
-    no_decay_params = []
-
+def make_optimizer(model, lr, weight_decay):
+    decay, no_decay = [], []
     for name, param in model.named_parameters():
         if not param.requires_grad:
             continue
-        
-        # param.ndim <= 1 catches ALL biases, LayerNorms, and 1D SSM params (like D)
-        # getattr catches custom PyTorch fallback flags
-        # "A_log" in name catches the 2D memory matrix in the official mamba_ssm package
-        if (param.ndim <= 1 or 
-            getattr(param, "_no_weight_decay", False) or 
-            "A_log" in name):
-            
-            no_decay_params.append(param)
+        if param.ndim <= 1 or getattr(param, "_no_weight_decay", False) or "A_log" in name:
+            no_decay.append(param)
         else:
-            decay_params.append(param)
+            decay.append(param)
+    return torch.optim.AdamW([
+        {"params": decay, "weight_decay": weight_decay},
+        {"params": no_decay, "weight_decay": 0.0},
+    ], lr=lr)
 
-    optim_groups = [
-        {"params": decay_params, "weight_decay": args.weight_decay},
-        {"params": no_decay_params, "weight_decay": 0.0},
-    ]
 
-    optimizer = torch.optim.AdamW(optim_groups, lr=lr)
+def epoch_loss(model, loader, criterion, device, optimizer=None):
+    model.train(optimizer is not None)
+    total, samples = 0.0, 0
+    with torch.set_grad_enabled(optimizer is not None):
+        for x, y in tqdm(loader, desc="Training" if optimizer else "Validation", leave=False):
+            x, y = batch_inputs(x, device), y.to(device)
+            if optimizer is not None:
+                optimizer.zero_grad()
+            loss = criterion(model(*x), y)
+            if optimizer is not None:
+                loss.backward()
+                optimizer.step()
+            total += loss.item() * len(y)
+            samples += len(y)
+    return total / samples
 
+
+def train(args):
+    set_seed(args.seed)
+    device = torch.device(("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA is unavailable; select --device cpu or auto")
+    if args.data_path:
+        path = args.data_path
+    elif args.wavelength_range in DATASET_PATHS:
+        path = REPO_ROOT / DATASET_PATHS[args.wavelength_range]
+    else:
+        raise ValueError(f"Unknown dataset: {args.wavelength_range}")
+    features, targets = load_stokes(path)
+    features, targets = features[:args.max_samples], targets[:args.max_samples]
+    train_end, val_end = int(0.7 * len(features)), int(0.8 * len(features))
+    splits = [slice(0, train_end), slice(train_end, val_end), slice(val_end, None)]
+    model_class = SO3_MODEL_TYPES[args.model_type]
+    include_time = getattr(model_class, "requires_time", False)
+    time_step = args.sample_interval or 1.0
+    time_config = {"time_origin": 0.0, "time_scale": (train_end - 1) * time_step} if include_time else {}
+    datasets = [SParameterDataset(features[s], targets[s], args.window_size, start_index=s.start or 0,
+                                  include_time=include_time, time_step=time_step) for s in splits]
+    loaders = [DataLoader(ds, batch_size=args.batch_size, shuffle=(i == 0), pin_memory=device.type == "cuda")
+               for i, ds in enumerate(datasets)]
+    train_loader, val_loader, test_loader = loaders
+    model = model_class(3, args.dim, args.layers, device=device, backend=args.backend, **time_config).to(device)
+    reg = args.lambda_reg
+    criterion = {
+        "mse": lambda: nn.MSELoss(),
+        "regmse": lambda: PoincareRegularizedMSE(0.2 if reg is None else reg),
+        "angular": lambda: AngularLoss(0.02 if reg is None else reg),
+        "infidelity": Infidelity,
+    }[args.loss.lower()]()
+    optimizer = make_optimizer(model, args.lr, args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=args.lr_factor,
-        patience=args.lr_patience, min_lr=args.min_lr,
+        optimizer, mode="min", factor=args.lr_factor, patience=args.lr_patience, min_lr=args.min_lr,
     )
-
-    criterion = loss_type
-
-    print(f"Model Parameters: {sum(p.numel() for p in model.parameters())}")
-    print(f"LR Scheduler: ReduceLROnPlateau (factor={args.lr_factor}, patience={args.lr_patience}, min_lr={args.min_lr})")
-    print("Starting Training...")
-
-    # Training Loop
-    train_losses, val_losses = [], []
-    best_val_loss = float('inf')
-    best_model_path = 'results/best_model_MAMBA.pt'
-
-    # Config required to reconstruct the model for inference
+    run_dir = create_run_directory(args.output_dir, args.wavelength_range, args.run_id)
+    checkpoint_path = run_dir / "best_model.pt"
     model_config = {
-        "model_type": "PolarizationMambaSO3",
-        "input_dim": 3,
-        "d_model": args.dim,
-        "n_layers": args.layers,
-        "window_size": window_size,
-        "system": system_os,
-        "wavelength_range": args.wavelength_range,
-        "loss": args.loss,
+        "model_type": args.model_type, "input_dim": 3,
+        "d_model": args.dim, "n_layers": args.layers, "window_size": args.window_size,
+        "backend": model.backend, "wavelength_range": args.wavelength_range, "loss": args.loss,
+        **time_config,
     }
-
-    patience = 10
-    static_epochs = 0
-    for epoch in range(epochs):
-        model.train()
-        batch_losses = []
-        
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}", unit="batch")
-        
-        for x, y in pbar:
-            x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
-            
-            optimizer.zero_grad()
-            output = model(x)
-            loss = criterion(output, y)
-            loss.backward()
-            optimizer.step()
-            batch_losses.append(loss.item())
-            
-            pbar.set_postfix({'loss': f'{loss.item():.4f}'})
-        
-        train_loss = np.mean(batch_losses)
+    if include_time:
+        model_config["time_units"] = "seconds" if args.sample_interval else "sample_index"
+    training_config = {**vars(args), "run_id": run_dir.name, "data_path": str(path),
+                       "num_samples": len(features), "train_end": train_end, "val_end": val_end}
+    print(f"Device: {device}; backend: {model.backend}; artifacts: {run_dir}")
+    best_val_loss, static_epochs = float("inf"), 0
+    train_losses, val_losses = [], []
+    for epoch in range(args.epochs):
+        train_loss = epoch_loss(model, train_loader, criterion, device, optimizer)
+        val_loss = epoch_loss(model, val_loader, criterion, device)
+        if not np.isfinite(train_loss) or not np.isfinite(val_loss):
+            raise RuntimeError("Non-finite training or validation loss")
         train_losses.append(train_loss)
-        
-        # Validation
-        model.eval()
-        epoch_val_losses = []
-        with torch.no_grad():
-            for x, y in val_loader:
-                x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
-                output = model(x)
-                epoch_val_losses.append(criterion(output, y).item())
-                
-        val_loss = np.mean(epoch_val_losses)
         val_losses.append(val_loss)
-
-        current_lr = optimizer.param_groups[0]['lr']
-
+        print(f"Epoch {epoch + 1}/{args.epochs}: train={train_loss:.6f}, val={val_loss:.6f}")
         if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            static_epochs = 0
-            torch.save({
-                "state_dict": model.state_dict(),
-                "config": model_config,
-                "best_val_loss": best_val_loss,
-            }, best_model_path)
-            tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | LR: {current_lr:.2e} | * Best model saved")
+            best_val_loss, static_epochs = val_loss, 0
+            torch.save({"format_version": 1, "state_dict": model.state_dict(), "config": model_config,
+                        "training_config": training_config, "best_val_loss": best_val_loss,
+                        "epoch": epoch + 1}, checkpoint_path)
         else:
             static_epochs += 1
-            tqdm.write(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | LR: {current_lr:.2e} | No improvement for {static_epochs} epochs")
-            
-            if static_epochs >= patience:
-                print(f"Early stopping triggered at epoch {epoch+1}!")
-                break
-
         scheduler.step(val_loss)
-
-    run_tag = f"_{args.run_id}" if args.run_id else ""
-    model_info = f"{args.dim}x{args.layers}_LR{lr}_Loss{args.loss}_dataset{args.wavelength_range}{run_tag}"
-
-    # Training Convergence Plot
-    plt.figure(figsize=(10, 6))
-    plt.plot(train_losses, label='Train Loss')
-    plt.plot(val_losses, label='Val Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title(f'MAMBA Training Convergence\n({model_info})')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(f'results/MAMBA_convergence_{model_info}.png')
-
-    # Load best validation model for final evaluation
-    checkpoint = torch.load(best_model_path, map_location=device, weights_only=False)
-    if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
-        model.load_state_dict(checkpoint["state_dict"])
-        best_val_loss = checkpoint.get("best_val_loss", best_val_loss)
-    else:
-        # Backward compatible with older state_dict-only checkpoints
-        model.load_state_dict(checkpoint)
-    print(f"Loaded best model (val loss: {best_val_loss:.6f}) for final evaluation on test set")
-    model.eval()
-    preds, actuals = [], []
-    with torch.no_grad():
-        for x, y in tqdm(test_loader, desc="Evaluating"):
-            x, y = x.to(device), y.to(device)
-            output = model(x)
-            preds.append(output.cpu().detach().numpy())
-            actuals.append(y.cpu().detach().numpy())
-
-    preds = np.concatenate(preds)
-    actuals = np.concatenate(actuals)
-
-    # Evaluation Plotting
-    # Number of points plotted (starting at end of training data)
-    N_PLOT = 1000
-
-    output_results(preds, actuals, val_end, window_size, model_info, N_PLOT)
-
-    # Save test metrics for sweep analysis
-    test_mse = float(np.mean((preds - actuals) ** 2))
-    test_rmse = float(np.sqrt(test_mse))
-    test_mae = float(np.mean(np.abs(preds - actuals)))
-    pred_norms = np.linalg.norm(preds.reshape(-1, 3), axis=1)
-    mean_deviation = float(np.mean(np.abs(pred_norms - 1.0)))
-
-
-    # Force normalization of predictions to poincare sphere and calculate metrics
-    preds_flat = preds.reshape(-1, 3)
-    actuals_flat = actuals.reshape(-1, 3)
-    norms = np.linalg.norm(preds_flat, axis=1, keepdims=True)
-    norms = np.clip(norms, 1e-8, None)
-    preds_normed = (preds_flat / norms).reshape(preds.shape)
-    # norm_mse = float(np.mean((preds_normed - actuals) ** 2))
-    # norm_rmse = float(np.sqrt(norm_mse))
-    # norm_mae = float(np.mean(np.abs(preds_normed - actuals)))
-
-    # Fidelity evaluation (1 - infidelity) on normalized predictions
-    infidelity_fn = Infidelity()
-    preds_normed_t = torch.from_numpy(preds_normed.reshape(-1, 3)).float()
-    actuals_t = torch.from_numpy(actuals.reshape(-1, 3)).float()
-    mean_infidelity = infidelity_fn(preds_normed_t, actuals_t).item()
-    mean_fidelity = 1.0 - mean_infidelity
-    print(f"Test Fidelity: {mean_fidelity:.6f}")
-
+        if static_epochs >= 10:
+            break
     metrics = {
-        'wavelength_range': delta_lambda,
-        'test_mse': test_mse,
-        'test_rmse': test_rmse,
-        'test_mae': test_mae,
-        'mean_deviation': mean_deviation,
-        'mean_fidelity': mean_fidelity,
-        'best_val_loss': float(best_val_loss),
-        'model_info': model_info,
+        "wavelength_range": args.wavelength_range, "run_id": run_dir.name,
+        "best_val_loss": best_val_loss, "checkpoint_path": str(checkpoint_path.resolve()),
+        "config": model_config, "training_config": training_config,
+        "model_info": f"{args.dim}x{args.layers}_{args.loss}_{run_dir.name}",
     }
-    metrics_path = f'results/MAMBA_test_results_{delta_lambda}{run_tag}.json'
-    with open(metrics_path, 'w') as f:
-        json.dump(metrics, f, indent=2)
-    print(f"Test metrics saved to {metrics_path}")
+    if not args.validation_only:
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
+        model.load_state_dict(checkpoint["state_dict"])
+        model.eval()
+        preds, actuals = [], []
+        with torch.inference_mode():
+            for x, y in test_loader:
+                preds.append(model(*batch_inputs(x, device)).cpu().numpy())
+                actuals.append(y.numpy())
+        preds, actuals = np.concatenate(preds), np.concatenate(actuals)
+        metrics.update(prediction_metrics(preds, actuals))
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(train_losses, label="Train loss")
+        ax.plot(val_losses, label="Validation loss")
+        ax.set(xlabel="Epoch", ylabel="Loss", title="Mamba SO3 convergence")
+        ax.legend()
+        fig.savefig(run_dir / "convergence.png")
+        plt.close(fig)
+        output_results(preds, actuals, val_end, args.window_size, metrics["model_info"],
+                       n_plot=1000, output_dir=run_dir, sample_interval=args.sample_interval)
+    with (run_dir / "metrics.json").open("w") as stream:
+        json.dump(metrics, stream, indent=2, allow_nan=False)
+    print(f"Metrics saved to {run_dir / 'metrics.json'}")
+    return metrics
+
+
+if __name__ == "__main__":
+    train(parse_args())
